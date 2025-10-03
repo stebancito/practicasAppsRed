@@ -1,0 +1,84 @@
+{
+    "productos": [
+        {
+            "id": 1,
+            "nombre": "Laptop Victus",
+            "marca": "HP",
+            "tipo": "Laptop",
+            "precio": 1200,
+            "stock": 3
+        },
+        {
+            "id": 2,
+            "nombre": "ThinkPad T14",
+            "marca": "Lenovo",
+            "tipo": "Laptop",
+            "precio": 1500,
+            "stock": 3
+        },
+        {
+            "id": 3,
+            "nombre": "iPhone 14",
+            "marca": "Apple",
+            "tipo": "Smartphone",
+            "precio": 999,
+            "stock": 10
+        },
+        {
+            "id": 4,
+            "nombre": "Galaxy S23",
+            "marca": "Samsung",
+            "tipo": "Smartphone",
+            "precio": 899,
+            "stock": 7
+        },
+        {
+            "id": 5,
+            "nombre": "Monitor UltraSharp",
+            "marca": "Dell",
+            "tipo": "Monitor",
+            "precio": 300,
+            "stock": 8
+        },
+        {
+            "id": 6,
+            "nombre": "Teclado Mecánico K95",
+            "marca": "Corsair",
+            "tipo": "Periférico",
+            "precio": 150,
+            "stock": 12
+        },
+        {
+            "id": 7,
+            "nombre": "Mouse G502",
+            "marca": "Logitech",
+            "tipo": "Periférico",
+            "precio": 70,
+            "stock": 20
+        },
+        {
+            "id": 8,
+            "nombre": "Impresora EcoTank L3250",
+            "marca": "Epson",
+            "tipo": "Impresora",
+            "precio": 250,
+            "stock": 4
+        },
+        {
+            "id": 9,
+            "nombre": "Smart TV QLED 55",
+            "marca": "Samsung",
+            "tipo": "Televisor",
+            "precio": 750,
+            "stock": 6
+        },
+        {
+            "id": 10,
+            "nombre": "PlayStation 5",
+            "marca": "Sony",
+            "tipo": "Consola",
+            "precio": 500,
+            "stock": 2
+        }
+    ]
+}
