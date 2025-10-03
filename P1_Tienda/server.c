@@ -15,8 +15,6 @@ void procesarPeticion(char *buffer, int nbytes, int cliente_s);
 
 int main(){
 
-    
-
     int server_s, cliente_s; // fd para el socket servidor y cliente
     char buffer[BUFF];       // buffer para datos entrantes
 
@@ -119,33 +117,51 @@ int main(){
 
 void procesarPeticion(char *buffer, int nbytes, int cliente_s){
 
+    json_t ** carrito = NULL;
+
     if(strncmp(buffer, "BUSCAR", 6) == 0){
 
         /* Hacemos un eco con la accion que nos dijo */
         char respuesta[] = "{\"accion\":\"BUSCAR\",\"estado\":\"OK\",\"mensaje\":\"Envie el nombre del producto\"}";
         send(cliente_s, respuesta, strlen(respuesta), 0);
 
-            printf("Producto/marca a buscar: %s\n", buffer+7);
+        printf("Producto/marca a buscar: %s\n", buffer+7);
 
 
-            char *resultado = NULL;
-            buscarProducto(buffer + 7, &resultado);
-            
-            printf("Resultado de la búsqueda: %s\n", resultado);
-
-            send(cliente_s, resultado, strlen(resultado), 0);
-            free(resultado);
+        char *resultado = NULL;
+        buscarProducto(buffer + 7, &resultado, 0); // 0 es el tipo de busqueda por nom/marca
+        
+        printf("Resultado de la búsqueda: %s\n", resultado);
+        
+        if(send(cliente_s, resultado, strlen(resultado), 0) == -1){
+            perror("send listar");
+        }
+        free(resultado);
     }
-    // else if(strcmp(buffer, "LISTAR") == 0){ LISTAR LOS PRODUTOS POR TIPO, ME VA A LLEGAR LISTAR + TIPO
-    //     char respuesta[] = listarArticulos(); 
-    //     send(cliente_s, respuesta, strlen(respuesta), 0);
-    // } else if(strcmp(buffer, "AGREGAR") == 0){ ME VA A MANDAR AGREGAR + NOMBRE Y YO AGREGARE AL CARRITO
-    //     char respuesta[] = agregarProducto();
-    //     send(cliente_s, respuesta, strlen(respuesta), 0); 
-    // } else if(strcmp(buffer, "EDITAR") == 0){ MANDARLE SU CARRITO EN FORMA DE ARREGLO DONDE SE VEAN LOS INDICES PARA QUE EL ESCOJA
-    //     char respuesta[] = borrarProducto();
-    //     send(cliente_s, respuesta, strlen(respuesta), 0);
-    // }
+    else if(strncmp(buffer, "LISTAR", 6) == 0){ ////LISTAR LOS PRODUTOS POR TIPO, ME VA A LLEGAR LISTAR + TIPO
+        char respuesta[] = listarArticulos(); 
+        send(cliente_s, respuesta, strlen(respuesta), 0);
+
+
+        printf("Listando articulos por tipo: %s\n", buffer+7);
+
+        char *resultado = NULL;
+        buscarProducto(buffer + 7, &resultado, 1); // 1 es el tipo de busqueda por tipo
+
+        printf("Lista de productos: %s\n", resultado);
+        if(send(cliente_s, resultado, strllen(resultado), 0) == -1){
+            perror("send listar");
+        }
+        free(resultado);
+    }
+    else if(strncmp(buffer, "AGREGAR", 7) == 0){ // ME VA A MANDAR AGREGAR + NOMBRE Y YO AGREGARE AL CARRITO
+        char respuesta[] = agregarProducto();
+        send(cliente_s, respuesta, strlen(respuesta), 0); 
+
+    } else if(strcmp(buffer, "EDITAR") == 0){ // MANDARLE SU CARRITO EN FORMA DE ARREGLO DONDE SE VEAN LOS INDICES PARA QUE EL ESCOJA
+        char respuesta[] = borrarProducto();
+        send(cliente_s, respuesta, strlen(respuesta), 0);
+    }
     else{
         char respuesta[] = "{\"error\":\"Comando no reconocido intente de nuevo\"}";
         send(cliente_s, respuesta, strlen(respuesta), 0);
