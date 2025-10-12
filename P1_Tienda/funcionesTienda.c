@@ -59,8 +59,67 @@ int existencias(json_t *producto, json_t *bd) {
     return 1; // éxito
 }
 
+/*
+    Incrementa el stock del producto en la base de datos JSON.
+    Retorna 1 si se actualizo correctamente.
+    Retorna -1 en caso de error.
+*/
+int devolverExistencia(const char * id_producto) {
 
-/* empaqueta un array de productos en un json_object */
+
+    json_t *bd = leerJSON();
+    if (!bd) {
+        fprintf(stderr, "Error: no se pudo leer la base de datos.\n");
+        return -1;
+    }
+
+    json_t *productos = json_object_get(bd, "productos");
+    if (!json_is_array(productos)) {
+        fprintf(stderr, "Error: 'productos' no es un arreglo.\n");
+        json_decref(bd);
+        return -1;
+    }
+
+
+    json_t *resultado = buscarProductoPor(id_producto, productos, 2);
+    if (!resultado) {
+        fprintf(stderr, "Error: producto con ID %s no encontrado.\n", id_producto);
+        json_decref(bd);
+        return -1;
+    }
+
+    // Obtenemos el producto encontrado
+    json_t *producto = json_array_get(resultado, 0);
+    json_t *stock_json = json_object_get(producto, "stock");
+
+    if (!json_is_integer(stock_json)) {
+        fprintf(stderr, "Error: campo 'stock' invalido en el producto.\n");
+        json_decref(resultado);
+        json_decref(bd);
+        return -1;
+    }
+
+    int stock_actual = json_integer_value(stock_json);
+    int nuevo_stock = stock_actual + 1;
+    json_object_set_new(producto, "stock", json_integer(nuevo_stock));
+
+    if (json_dump_file(bd, PATH_JSON, JSON_INDENT(4)) != 0) {
+        fprintf(stderr, "Error al escribir la base de datos en %s.\n", PATH_JSON);
+        json_decref(resultado);
+        json_decref(bd);
+        return -1;
+    }
+
+    printf("Stock incrementado: %d -> %d (ID: %s)\n", stock_actual, nuevo_stock, id_producto);
+
+    json_decref(resultado);
+    json_decref(bd);
+    return 1;
+}
+
+
+
+/* Empaqueta un array de productos en un json_object */
 json_t* prepararJSONRespuesta(json_t *resultados) {
     json_t *respuesta = json_object();
 
@@ -209,7 +268,7 @@ void agregarProducto(json_t *carrito, json_t *producto) {
         }
     }
 
-    // Si no estaba, agregamos con cantidad = 1
+    /* Agregamos con cantidad = 1 */
     json_object_set_new(producto_copia, "cantidad", json_integer(1));
     json_array_append_new(carrito, producto_copia);
 }
@@ -230,8 +289,7 @@ void agregarCarrito(S_Cliente *cliente, const char *nombreProducto, char **respu
         return;
     }
 
-    // Buscar producto por ID
-    json_t *resultado_busqueda = buscarProductoPor(nombreProducto, productos, 2);
+    json_t *resultado_busqueda = buscarProductoPor(nombreProducto, productos, 2); // buscar por ID
     if (!resultado_busqueda) {
         *respuesta = strdup("{\"error\":\"Producto no encontrado\"}");
         json_decref(archivo_bd);
@@ -258,4 +316,62 @@ void agregarCarrito(S_Cliente *cliente, const char *nombreProducto, char **respu
     json_decref(resultado_busqueda);
     json_decref(json_final);
     json_decref(archivo_bd);
+}
+
+/* 
+    Función para decrementar o eliminar producto del carrito del cliente.
+    Si la cantidad > 1 la reduce.
+    Si la cantidad = 1 elimina el producto del carrito.
+    Devuelve la existencia al stock de la BD.
+*/
+void editarCarrito(S_Cliente *cliente, const char *idProducto, char **respuesta) {
+    if (!cliente || !cliente->carrito) {
+        *respuesta = strdup("{\"error\":\"Carrito no disponible\"}");
+        return;
+    }
+
+    int id_a_decrementar = atoi(idProducto);
+    if (id_a_decrementar <= 0) {
+        *respuesta = strdup("{\"error\":\"ID inválido\"}");
+        return;
+    }
+
+    size_t i;
+    json_t *item;
+    int encontrado = 0;
+
+    for (i = 0; i < json_array_size(cliente->carrito); i++) {
+        item = json_array_get(cliente->carrito, i);
+        json_t *id_item = json_object_get(item, "id");
+
+        if (json_is_integer(id_item) && json_integer_value(id_item) == id_a_decrementar) {
+            encontrado = 1;
+
+            json_t *cantidad_json = json_object_get(item, "cantidad");
+            int cantidad = json_is_integer(cantidad_json) ? json_integer_value(cantidad_json) : 0;
+
+            if (cantidad > 1) {
+                json_object_set_new(item, "cantidad", json_integer(cantidad - 1));
+            } else {
+                json_array_remove(cliente->carrito, i);
+            }
+
+            /* Incrementar el stock en la BD */
+            if (devolverExistencia(idProducto) == -1) {
+                *respuesta = strdup("{\"error\":\"Error al actualizar stock en la BD\"}");
+                return;
+            }
+
+            break;
+        }
+    }
+
+    if (!encontrado) {
+        *respuesta = strdup("{\"error\":\"Producto no encontrado en el carrito\"}");
+        return;
+    }
+
+    json_t *json_final = prepararJSONRespuesta(cliente->carrito);
+    *respuesta = json_dumps(json_final, JSON_INDENT(4));
+    json_decref(json_final);
 }

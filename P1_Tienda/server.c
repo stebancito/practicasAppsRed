@@ -22,6 +22,7 @@ void procesarPeticion(char *buffer, int nbytes, S_Cliente cliente);
 
 int main(){
 
+    
     int server_s;            // fd para el socket servidor
     char buffer[BUFF];       // buffer para datos entrantes
 
@@ -162,9 +163,9 @@ void procesarPeticion(char *buffer, int nbytes, S_Cliente cliente){
         }
         free(resultado);
     }
-    else if(strncmp(buffer, "AGREGAR", 7) == 0){ // ME VA A MANDAR AGREGAR + id Y YO AGREGARE AL CARRITO\
+    else if(strncmp(buffer, "AGREGAR", 7) == 0){ // ME VA A MANDAR AGREGAR + id Y YO AGREGARE AL CARRITO
 
-        printf("Agregando articulo al carrito, ID: %s\n", buffer+8); // gestionar si id es caracter o entero
+        printf("Agregando articulo al carrito, ID: %s\n", buffer+8);
 
         char * resultado = NULL; 
         agregarCarrito(&cliente, buffer + 8, &resultado); 
@@ -175,11 +176,54 @@ void procesarPeticion(char *buffer, int nbytes, S_Cliente cliente){
         
         free(resultado);
 
+
     } 
-    //else if(strcmp(buffer, "EDITAR") == 0){ // MANDARLE SU CARRITO EN FORMA DE ARREGLO DONDE SE VEAN LOS INDICES PARA QUE EL ESCOJA
-    //     char respuesta[] = borrarProducto();
-    //     send(cliente.socket, respuesta, strlen(respuesta), 0);
-    // }
+    else if(strcmp(buffer, "EDITAR") == 0) {
+        char *resultado = NULL;
+
+        /* Enviamos su carrito actual */
+        if(json_array_size(cliente.carrito) == 0){
+            resultado = strdup("{\"error\":\"Debes tener un carrito para editarlo!\"}");
+            if(send(cliente.socket, resultado, strlen(resultado), 0) == -1){
+
+                perror("send editar");
+                free(resultado);
+            }
+            return;  // ISAAC GESTIONA ESTO EN EL CLIENTE PARA QUE NO ME ENVIES EL ID DE UN PRODUCTO SI NO TENGO NADA EN EL CARRITO
+        }
+        json_t *carrito_actual = prepararJSONRespuesta(cliente.carrito);
+        resultado = json_dumps(carrito_actual, JSON_INDENT(4));
+
+
+        if(send(cliente.socket, resultado, strlen(resultado), 0) == -1)
+            perror("send editar");
+        
+        free(resultado);
+        json_decref(carrito_actual);
+
+        /* Recibimos el id del producto a decrementar */
+        int nbytes;
+        if ((nbytes = recv(cliente.socket, buffer, BUFF-1, 0)) < 0) {
+            perror("recv editar");
+            return;
+        }
+        if (nbytes == 0) {
+            printf("Cliente desconectado durante edición\n");
+            return;
+        }
+
+        buffer[nbytes] = '\0';
+        printf("Cliente decrementar ID: %s\n", buffer);
+
+        editarCarrito(&cliente, buffer, &resultado);
+
+        printf("Resultado de editar carrito: %s\n", resultado);
+        if(send(cliente.socket, resultado, strlen(resultado), 0) == -1)
+            perror("send editar");
+        
+        free(resultado);
+    }
+
     else{
         char respuesta[] = "{\"error\":\"Comando no reconocido intente de nuevo\"}";
         send(cliente.socket, respuesta, strlen(respuesta), 0);

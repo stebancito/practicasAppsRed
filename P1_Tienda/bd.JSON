@@ -6,7 +6,7 @@
             "marca": "HP",
             "tipo": "Laptop",
             "precio": 1200,
-            "stock": 10
+            "stock": 8
         },
         {
             "id": 2,
@@ -14,7 +14,7 @@
             "marca": "HP",
             "tipo": "Laptop",
             "precio": 1500,
-            "stock": 11
+            "stock": 6
         },
         {
             "id": 3,
