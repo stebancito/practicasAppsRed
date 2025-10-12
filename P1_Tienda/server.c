@@ -1,3 +1,9 @@
+/* 
+Servidor 
+
+gcc server.c funcionesTienda.c -o servidor -ljansson
+*/
+
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -11,11 +17,12 @@
 #define BACKLOG 3
 #define BUFF    3000
 
-void procesarPeticion(char *buffer, int nbytes, int cliente_s);
+
+void procesarPeticion(char *buffer, int nbytes, S_Cliente cliente);
 
 int main(){
 
-    int server_s, cliente_s; // fd para el socket servidor y cliente
+    int server_s;            // fd para el socket servidor
     char buffer[BUFF];       // buffer para datos entrantes
 
     struct addrinfo s_configs; // configuraciones del servidor
@@ -54,12 +61,12 @@ int main(){
             continue;
         }
         
-        printf("Socket creado y bindeado con éxito en puerto %s\n", PUERTO);
+        printf("\033[0;32mS: Socket creado y bindeado con éxito en puerto %s\n\033[0m", PUERTO);
         break;
     }
 
     if (lista_aux == NULL){
-        fprintf(stderr, "No se pudo crear y bindear el socket\n");
+        fprintf(stderr, "\033[0;30mNo se pudo crear y bindear el socket\n\033[0m");
         return 2;
     }
 
@@ -70,60 +77,64 @@ int main(){
         close(server_s);
         exit(1);
     }
-    printf("Servidor escuchando en el puerto %s...\n", PUERTO);
+    printf("S: Servidor escuchando en el puerto %s...\n", PUERTO);
 
-    /* Guardamos direccion del cliente*/
+    /* Guardamos direccion del cliente */
     struct sockaddr_storage cliente_addr;
     socklen_t cliente_tam_addr = sizeof cliente_addr;
 
         while(1){
-            printf("Esperando conexiones...\n");
-            cliente_s = accept(server_s, (struct sockaddr *)&cliente_addr, &cliente_tam_addr);
+            printf("S: Esperando conexiones...\n\n");
+            S_Cliente cliente;
+            cliente.socket =  accept(server_s, (struct sockaddr *)&cliente_addr, &cliente_tam_addr);
         
-            if (cliente_s == -1) {
+            if (cliente.socket == -1) {
                 perror("accept");
                 continue;
             }
 
-            printf("Cliente conectado!\n");
+            printf("\033[0;32mS: Cliente conectado!\n\033[0m");
+            cliente.carrito = json_array(); // carrito vacío
+
 
             int nbytes;
-            while((nbytes = recv(cliente_s, buffer, BUFF-1, 0)) > 0){
+            while((nbytes = recv(cliente.socket, buffer, BUFF-1, 0)) > 0){
                 buffer[nbytes] = '\0';
-                printf("Cliente dice: %s\n", buffer);
+                printf("\tCliente dice: %s\n", buffer);
 
                 if(strncmp(buffer, "SALIR", 5) == 0){
-                    printf("Cliente pidió salir.\n");
+                    printf("S: Cliente pidió salir.\n");
                     break;
                 }else{
-                    procesarPeticion(buffer, nbytes, cliente_s);
+                    procesarPeticion(buffer, nbytes, cliente);
                 }
             }
 
             if (nbytes == 0) {
-                printf("El cliente cerró la conexión.\n");
+                printf("\n\033[31mS: El cliente cerró la conexión.\n\033[0m");
+                json_decref(cliente.carrito); // liberar memoria al final
+
             } else if (nbytes == -1) {
                 perror("recv");
             }
 
 
-            close(cliente_s);
-            printf("Conexión con cliente cerrada.\n");
+            close(cliente.socket);
+            printf("S: Conexión con cliente cerrada.\n");
+            json_decref(cliente.carrito); // liberar memoria al final
+
         }    
 
         close(server_s);
         return 0;
 }
 
-void procesarPeticion(char *buffer, int nbytes, int cliente_s){
+void procesarPeticion(char *buffer, int nbytes, S_Cliente cliente){
 
     json_t ** carrito = NULL;
 
     if(strncmp(buffer, "BUSCAR", 6) == 0){
 
-        /* Hacemos un eco con la accion que nos dijo */
-        char respuesta[] = "{\"accion\":\"BUSCAR\",\"estado\":\"OK\",\"mensaje\":\"Envie el nombre del producto\"}";
-        send(cliente_s, respuesta, strlen(respuesta), 0);
 
         printf("Producto/marca a buscar: %s\n", buffer+7);
 
@@ -133,15 +144,12 @@ void procesarPeticion(char *buffer, int nbytes, int cliente_s){
         
         printf("Resultado de la búsqueda: %s\n", resultado);
         
-        if(send(cliente_s, resultado, strlen(resultado), 0) == -1){
-            perror("send listar");
+        if(send(cliente.socket, resultado, strlen(resultado), 0) == -1){
+            perror("send buscar");
         }
         free(resultado);
     }
     else if(strncmp(buffer, "LISTAR", 6) == 0){ ////LISTAR LOS PRODUTOS POR TIPO, ME VA A LLEGAR LISTAR + TIPO
-        char respuesta[] = listarArticulos(); 
-        send(cliente_s, respuesta, strlen(respuesta), 0);
-
 
         printf("Listando articulos por tipo: %s\n", buffer+7);
 
@@ -149,21 +157,31 @@ void procesarPeticion(char *buffer, int nbytes, int cliente_s){
         buscarProducto(buffer + 7, &resultado, 1); // 1 es el tipo de busqueda por tipo
 
         printf("Lista de productos: %s\n", resultado);
-        if(send(cliente_s, resultado, strllen(resultado), 0) == -1){
+        if(send(cliente.socket, resultado, strlen(resultado), 0) == -1){
             perror("send listar");
         }
         free(resultado);
     }
-    else if(strncmp(buffer, "AGREGAR", 7) == 0){ // ME VA A MANDAR AGREGAR + NOMBRE Y YO AGREGARE AL CARRITO
-        char respuesta[] = agregarProducto();
-        send(cliente_s, respuesta, strlen(respuesta), 0); 
+    else if(strncmp(buffer, "AGREGAR", 7) == 0){ // ME VA A MANDAR AGREGAR + id Y YO AGREGARE AL CARRITO\
 
-    } else if(strcmp(buffer, "EDITAR") == 0){ // MANDARLE SU CARRITO EN FORMA DE ARREGLO DONDE SE VEAN LOS INDICES PARA QUE EL ESCOJA
-        char respuesta[] = borrarProducto();
-        send(cliente_s, respuesta, strlen(respuesta), 0);
-    }
+        printf("Agregando articulo al carrito, ID: %s\n", buffer+8); // gestionar si id es caracter o entero
+
+        char * resultado = NULL; 
+        agregarCarrito(&cliente, buffer + 8, &resultado); 
+        printf("Resultado de agregar al carrito: %s\n", resultado);
+
+        if(send(cliente.socket, resultado, strlen(resultado), 0) == -1)
+            perror("send agregar");
+        
+        free(resultado);
+
+    } 
+    //else if(strcmp(buffer, "EDITAR") == 0){ // MANDARLE SU CARRITO EN FORMA DE ARREGLO DONDE SE VEAN LOS INDICES PARA QUE EL ESCOJA
+    //     char respuesta[] = borrarProducto();
+    //     send(cliente.socket, respuesta, strlen(respuesta), 0);
+    // }
     else{
         char respuesta[] = "{\"error\":\"Comando no reconocido intente de nuevo\"}";
-        send(cliente_s, respuesta, strlen(respuesta), 0);
+        send(cliente.socket, respuesta, strlen(respuesta), 0);
     }
 }

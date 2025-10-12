@@ -11,43 +11,52 @@ json_t * leerJSON(){
     json_error_t error;
 
     archivo_bd = json_load_file(filename, 0, &error);
+
     if (!archivo_bd) {
         fprintf(stderr, "Error en línea %d: %s\n", error.line, error.text);
         return NULL;
     }
 
-    json_decref(archivo_bd);
     
     return archivo_bd;
 }
 
-int existencias(json_t *producto, json_t * bd){
+/* 
+retorna 1 si hay existencias y se decrementa
+retorna -1 si no hay existencias
+*/
+int existencias(json_t *producto, json_t *bd) {
+    if (!producto || !bd) {
+        fprintf(stderr, "Error: producto o base de datos nulos.\n");
+        return -1;
+    }
 
-    json_t *nombre = json_object_get(producto, "nombre");
+    // Obtener stock actual
     json_t *stock = json_object_get(producto, "stock");
+    if (!json_is_integer(stock)) {
+        fprintf(stderr, "Error: campo 'stock' no es entero o no existe.\n");
+        return -1;
+    }
 
-
-    printf("Stock actual: %d\n", (int)json_integer_value(stock));
-
-
-    if (json_integer_value(stock) > 0) {
-        json_integer_set(stock, json_integer_value(stock) - 1);
-        printf("Stock actualizado: %d\n", (int)json_integer_value(stock));
-
-        if (json_dump_file(bd, PATH_JSON, JSON_INDENT(4)) != 0) {
-            fprintf(stderr, "Error al escribir el archivo JSON en %s\n", PATH_JSON);
-        }
-
-        return 1;
-
-    } else {
+    int stock_actual = json_integer_value(stock);
+    if (stock_actual <= 0) {
         printf("El producto está agotado.\n");
         return -1;
     }
 
-    json_decref(nombre);
-    json_decref(stock);
-    
+    // Reducir stock SOLO en la BD
+    int nuevo_stock = stock_actual - 1;
+    json_object_set_new(producto, "stock", json_integer(nuevo_stock));
+
+    printf("Stock actualizado en BD: %d\n", nuevo_stock);
+
+    // Guardar cambios en el archivo JSON
+    if (json_dump_file(bd, PATH_JSON, JSON_INDENT(4)) != 0) {
+        fprintf(stderr, "Error al escribir el archivo JSON en %s\n", PATH_JSON);
+        return -1;
+    }
+
+    return 1; // éxito
 }
 
 
@@ -71,10 +80,12 @@ json_t* prepararJSONRespuesta(json_t *resultados) {
     return respuesta;
 }
 
-
+/* 
+    tipo = 2 si se quiere buscar por id, tipo = 1 si se quiere buscar por tipo, 0 si se quiere buscar por nombre o marca
+    nombre_producto puede tomar el valor de un nombre, marca, tipo o id
+*/
 json_t * buscarProductoPor(const char *nombre_producto, json_t *productos, int tipo){
-    /* tipo = 1 si se quiere buscar por tipo, 0 si se quiere buscar por nombre o marca*/
-    /* nombre_producto puede tomar el valor de un nombre, marca o tipo*/
+
     const char *buscar = nombre_producto;
     
     size_t index;
@@ -83,8 +94,6 @@ json_t * buscarProductoPor(const char *nombre_producto, json_t *productos, int t
 
     json_t *resultado = NULL;
     
-
-    /* por si encontramos varios resultadoas para una misma marca/nombre/tipo*/
     resultado = json_array();
 
     /* Se busca el producto a traves del array productos */
@@ -110,6 +119,15 @@ json_t * buscarProductoPor(const char *nombre_producto, json_t *productos, int t
                 printf("Tipo encontrado: %s\n", buscar);
                 json_array_append(resultado, producto);
             }
+        }else if(tipo == 2){
+            int id_buscar = atoi(buscar);
+            json_t *id_producto = json_object_get(producto, "id");
+            if (json_is_integer(id_producto) && id_buscar == json_integer_value(id_producto)) {
+                encontrado = 1;
+                printf("ID encontrado: %s\n", buscar);
+                json_array_append(resultado, producto);
+                break;
+            }
         }
     }
 
@@ -124,7 +142,6 @@ json_t * buscarProductoPor(const char *nombre_producto, json_t *productos, int t
 
 void buscarProducto(const char *nombreProducto, char **respuesta, int tipoBusqueda){
     
-    /* Leemos archivo de BD*/
     json_t *archivo_bd = leerJSON();
     json_t *productos = json_object_get(archivo_bd, "productos");
 
@@ -133,53 +150,112 @@ void buscarProducto(const char *nombreProducto, char **respuesta, int tipoBusque
 
 
     if(productos == NULL){
-        *respuesta = "{\"error\":\"No se pudo leer la base de datos\"}";
+        printf("%p\n", productos);
+        /* strdup hace que un string literal sea dinamico (para no tener conflictos con el free(respuesta)) */
+        *respuesta = strdup("{\"error\":\"No se pudo leer la base de datos\"}"); 
         return;
     }
 
     resultado_busqueda = buscarProductoPor(nombreProducto, productos, tipoBusqueda);
     json_final = prepararJSONRespuesta(resultado_busqueda);
     /* convertimos json_object a texto plano */
-    *respuesta = json_dumps(json_final, JSON_IDENT(4));
+    *respuesta = json_dumps(json_final, JSON_INDENT(4));
 
     json_decref(resultado_busqueda);
     json_decref(json_final);
     json_decref(productos);   // liberar toda la BD
+    json_decref(archivo_bd);
+
     return ;
 
 }
 
+/* Inserta el producto en el carrito */
+void agregarProducto(json_t *carrito, json_t *producto) {
+    if (!json_is_array(carrito) || !json_is_object(producto)) {
+        printf("Error: parámetros inválidos en agregarProducto\n");
+        return;
+    }
 
-void agregarCarrito(const char *nombreProducto, char **respuesta){
-    json_t *carrito = json_array(); // ocupo que carrito sea una especie de variable global para usarlo en demas funciones, chance con un puntero a un carrito
+    // Crear copia para el carrito y eliminar stock
+    json_t *producto_copia = json_deep_copy(producto);
+    json_object_del(producto_copia, "stock");
+
+    // Obtener ID del producto
+    json_t *id_json = json_object_get(producto_copia, "id");
+    if (!json_is_integer(id_json)) {
+        printf("Error: producto sin ID válido\n");
+        json_decref(producto_copia);
+        return;
+    }
+    int id_nuevo = json_integer_value(id_json);
+
+    // Verificar si ya está en el carrito
+    size_t i;
+    json_t *item;
+    for (i = 0; i < json_array_size(carrito); i++) {
+        item = json_array_get(carrito, i);
+        json_t *id_existente_json = json_object_get(item, "id");
+        if (json_is_integer(id_existente_json) &&
+            json_integer_value(id_existente_json) == id_nuevo) {
+            
+            // Incrementar cantidad
+            json_t *cantidad_json = json_object_get(item, "cantidad");
+            int cantidad = json_is_integer(cantidad_json) ? json_integer_value(cantidad_json) : 0;
+            json_object_set_new(item, "cantidad", json_integer(cantidad + 1));
+
+            json_decref(producto_copia); // no agregamos copia nueva
+            return;
+        }
+    }
+
+    // Si no estaba, agregamos con cantidad = 1
+    json_object_set_new(producto_copia, "cantidad", json_integer(1));
+    json_array_append_new(carrito, producto_copia);
+}
+
+/* Funcion principal para agregar al carrito */
+void agregarCarrito(S_Cliente *cliente, const char *nombreProducto, char **respuesta) {
 
     json_t *archivo_bd = leerJSON();
+    if (!archivo_bd) {
+        *respuesta = strdup("{\"error\":\"No se pudo leer la base de datos\"}");
+        return;
+    }
+
     json_t *productos = json_object_get(archivo_bd, "productos");
-    json_t *json_final, * resultado_busqueda;
-
-    
-    if(productos == NULL){
-        *respuesta = "{\"error\":\"No se pudo leer la base de datos\"}";
+    if (!productos) {
+        *respuesta = strdup("{\"error\":\"No se pudo leer la lista de productos\"}");
+        json_decref(archivo_bd);
         return;
     }
 
-    resultado_busqueda = buscarProductoPor(nombreProducto, productos, 0); // no se si buscar por id
+    // Buscar producto por ID
+    json_t *resultado_busqueda = buscarProductoPor(nombreProducto, productos, 2);
+    if (!resultado_busqueda) {
+        *respuesta = strdup("{\"error\":\"Producto no encontrado\"}");
+        json_decref(archivo_bd);
+        return;
+    }
 
-    if(existencias(resultado_busqueda, archivo_bd) == -1){
-        *respuesta = "{\"error\":\"No hay existencias del producto\"}";
+    json_t *producto_seleccionado = json_array_get(resultado_busqueda, 0);
+
+    /* Verificar existencias y reducir stock en BD */
+    if (existencias(producto_seleccionado, archivo_bd) == -1) {
+        *respuesta = strdup("{\"error\":\"No hay existencias del producto\"}");
+
         json_decref(resultado_busqueda);
-        json_decref(productos);
+        json_decref(archivo_bd);
         return;
     }
 
-    agregarProducto(carrito, resultado_busqueda);
+    agregarProducto(cliente->carrito, producto_seleccionado);
 
-    json_final = prepararJSONRespuesta(resultado_busqueda);
+    json_t *json_final = prepararJSONRespuesta(cliente->carrito);
+    *respuesta = json_dumps(json_final, JSON_INDENT(4));
 
-    *respuesta = json_dumps(json_final, JSON_IDENT(4));
 
     json_decref(resultado_busqueda);
     json_decref(json_final);
-    json_decref(productos);   // liberar toda la BD
+    json_decref(archivo_bd);
 }
-
