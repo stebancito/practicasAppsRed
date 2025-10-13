@@ -17,4 +17,7 @@ void editarCarrito(S_Cliente *cliente, const char *idProducto, char **respuesta)
 json_t* prepararJSONRespuesta(json_t *resultados);
 json_t * buscarProductoPor(const char *nombre_producto, json_t *productos, int tipo);
 
+void generarTicket(S_Cliente *cliente, char **respuesta);
+json_t *generarDetalleProducto(json_t *producto, double *total_general);
+
 #endif
