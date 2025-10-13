@@ -1,10 +1,12 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
 public class ClienteComprador {
     public static void main(String[] args) {
-            final String HOST = "10.225.89.93";
+        //final String HOST = "127.0.0.1";
+        final String HOST = "127.0.0.1";
         final int PUERTO = 8080;
         DataInputStream in;
         DataOutputStream out;
@@ -26,33 +28,88 @@ public class ClienteComprador {
                 sc.nextLine();
 
                 if (opcion == 1){
-                    //out.writeUTF("BUSCAR");
-//                    out.write("BUSCAR".getBytes());
-//                    out.flush();
-//                    System.out.println("Acabas de acceder al buscador\n");
-//                    System.out.println("Escrribe el nommbre de producto: ");
-                    //String producto = sc.nextLine();
-                    //out.writeUTF(producto);
                     System.out.print("Nombre del producto: ");
                     String producto = sc.nextLine();
+
                     String comando = "BUSCAR " + producto;
-                    out.write(comando.getBytes());
+                    out.write(comando.getBytes(StandardCharsets.UTF_8));
                     out.flush();
 
                     byte[] buf = new byte[1024];
                     int n = in.read(buf);
-                    String respuesta = new String(buf, 0, n);
+                    String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+                    System.out.println("Servidor: " + respuesta);
+                } else if (opcion == 2) {
+                    System.out.println("Escribe el tipo de producto");
+                    String producto = sc.nextLine();
+                    String comando = "LISTAR " + producto;
+                    out.write(comando.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+
+                    byte[] buf = new byte[1024];
+                    int n = in.read(buf);
+                    String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+                    System.out.println("Servidor: " + respuesta);
+                } else if (opcion == 3){
+                    System.out.println("Escribe el id del producto");
+                    String id = sc.nextLine();
+                    String comando = "AGREGAR " + id;
+                    out.write(comando.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+
+                    byte[] buf = new byte[1024];
+                    int n = in.read(buf);
+                    String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
                     System.out.println("Servidor: " + respuesta);
 
-                } else if (opcion == 2) {
-                    out.writeUTF("LISTAR");
-                    System.out.println("Escribe el tipo de producto");
-                } else if (opcion == 3){
-                    out.writeUTF("AGREGAR");
                 } else if (opcion == 4) {
-                    out.writeUTF("EDITAR");
+                    System.out.println("Este es tu carrito");
+
+                    String comando = "EDITAR";
+                    out.write(comando.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+
+                    byte[] buf = new byte[1024];
+                    int n = in.read(buf);
+                    String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+                    System.out.println("Servidor: " + respuesta);
+
+                    if (respuesta.contains("Debes tener un carrito")) {
+                        System.out.println("No tienes carrito, regresando al menú principal...\n");
+                        continue; // Salta esta iteración y vuelve al menú
+                    }
+
+
+                    System.out.println("Escribe el id del producto (o escribe 'salir' para regresar):");
+                    String id = sc.nextLine().trim();
+
+                    if (id.equalsIgnoreCase("salir") || id.equals("0")) {
+                        out.write("0".getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        byte[] buf2 = new byte[1024];
+                        int n2 = in.read(buf2);
+                        String respuesta2 = new String(buf2, 0, n2, StandardCharsets.UTF_8).trim();
+
+                        continue;
+                    }
+
+                    out.write(id.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+
+                    byte[] buf2 = new byte[1024];
+                    int n2 = in.read(buf2);
+                    String respuesta2 = new String(buf2, 0, n2, StandardCharsets.UTF_8).trim();
+                    System.out.println("Servidor: " + respuesta2);
+
                 } else if (opcion == 5) {
-                    out.writeUTF("FINALIZAR");
+                    String comando = "SALIR";
+                    out.write(comando.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+
+                    byte[] buf = new byte[1024];
+                    int n = in.read(buf);
+                    String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+                    System.out.println("Servidor: " + respuesta);
                 }else {
                     System.out.println("Opcion no valida");
                 }
