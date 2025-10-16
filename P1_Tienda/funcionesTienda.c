@@ -375,3 +375,66 @@ void editarCarrito(S_Cliente *cliente, const char *idProducto, char **respuesta)
     *respuesta = json_dumps(json_final, JSON_INDENT(4));
     json_decref(json_final);
 }
+
+void generarTicket(S_Cliente *cliente, char **respuesta) {
+    if (!cliente || !cliente->carrito || json_array_size(cliente->carrito) == 0) {
+        *respuesta = strdup("{\"error\":\"El carrito está vacío o no disponible\"}");
+        return;
+    }
+
+    json_t *ticket = json_object();
+    json_t *items = json_array();
+
+    double total_general = 0.0;
+
+    /* procesamiento de cada producto del carrito */
+    for (size_t i = 0; i < json_array_size(cliente->carrito); i++) {
+        json_t *item = json_array_get(cliente->carrito, i);
+        json_t *obj = generarDetalleProducto(item, &total_general);
+        if (obj) json_array_append_new(items, obj);
+    }
+
+    json_object_set_new(ticket, "productos", items);
+    json_object_set_new(ticket, "total", json_real(total_general));
+    json_object_set_new(ticket, "mensaje", json_string("Compra finalizada con exito"));
+
+    *respuesta = json_dumps(ticket, JSON_INDENT(4));
+
+
+    json_array_clear(cliente->carrito);
+
+    json_decref(ticket);
+}
+
+json_t *generarDetalleProducto(json_t *producto, double *total_general) {
+    if (!producto || !total_general) return NULL;
+
+    /* Sacamos los datos del producto*/
+    json_t *nombre_json = json_object_get(producto, "nombre");
+    json_t *marca_json = json_object_get(producto, "marca");
+    json_t *precio_json = json_object_get(producto, "precio");
+    json_t *cantidad_json = json_object_get(producto, "cantidad");
+
+    if (!json_is_string(nombre_json) || !json_is_string(marca_json) ||
+        !json_is_number(precio_json) || !json_is_integer(cantidad_json)) {
+        fprintf(stderr, "Error: datos inválidos en un producto del carrito.\n");
+        return NULL;
+    }
+
+    const char *nombre = json_string_value(nombre_json);
+    const char *marca = json_string_value(marca_json);
+    double precio = json_number_value(precio_json);
+    int cantidad = json_integer_value(cantidad_json);
+
+    double subtotal = precio * cantidad;
+    *total_general += subtotal;
+
+    json_t *producto_ticket = json_object();
+    json_object_set_new(producto_ticket, "nombre", json_string(nombre));
+    json_object_set_new(producto_ticket, "marca", json_string(marca));
+    json_object_set_new(producto_ticket, "cantidad", json_integer(cantidad));
+    json_object_set_new(producto_ticket, "precio_unitario", json_real(precio));
+    json_object_set_new(producto_ticket, "subtotal", json_real(subtotal));
+
+    return producto_ticket;
+}

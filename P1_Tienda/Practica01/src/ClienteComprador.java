@@ -102,14 +102,25 @@ public class ClienteComprador {
                     System.out.println("Servidor: " + respuesta2);
 
                 } else if (opcion == 5) {
-                    String comando = "SALIR";
+                    String comando = "COMPRAR";
                     out.write(comando.getBytes(StandardCharsets.UTF_8));
                     out.flush();
 
-                    byte[] buf = new byte[1024];
+                    byte[] buf = new byte[4096];
                     int n = in.read(buf);
+                    
+                    if (n == -1) {
+                        System.out.println("El servidor cerró la conexión antes de enviar el ticket.");
+                        break;
+                    }
+
                     String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
-                    System.out.println("Servidor: " + respuesta);
+                    System.out.println("\n=== TICKET DE COMPRA ===");
+                    System.out.println(respuesta);
+                    System.out.println("========================");
+                    
+                    System.out.println("\nCompra finalizada. ¡Gracias por tu compra!");
+                    break;
                 }else {
                     System.out.println("Opcion no valida");
                 }

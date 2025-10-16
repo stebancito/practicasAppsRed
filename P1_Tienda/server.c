@@ -223,7 +223,19 @@ void procesarPeticion(char *buffer, int nbytes, S_Cliente cliente){
         
         free(resultado);
     }
+    else if(strncmp(buffer, "COMPRAR", 7) == 0){
+        printf("Finalizando compra y generando ticket\n");
 
+        char * resultado = NULL; 
+        generarTicket(&cliente, &resultado); 
+        printf("Ticket generado: %s\n", resultado);
+
+        if(send(cliente.socket, resultado, strlen(resultado), 0) == -1)
+            perror("send ticket");
+        
+        free(resultado);
+
+    }
     else{
         char respuesta[] = "{\"error\":\"Comando no reconocido intente de nuevo\"}";
         send(cliente.socket, respuesta, strlen(respuesta), 0);
