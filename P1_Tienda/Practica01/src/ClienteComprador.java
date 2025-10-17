@@ -24,6 +24,8 @@ public class ClienteComprador {
                 System.out.println("3. Agregar al carrito");
                 System.out.println("4. Editar carrito");
                 System.out.println("5. Finalizar compra");
+                System.out.println("6. Salir");
+
                 int opcion = sc.nextInt();
                 sc.nextLine();
 
@@ -115,13 +117,22 @@ public class ClienteComprador {
                     }
 
                     String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
-                    System.out.println("\n=== TICKET DE COMPRA ===");
+                    System.out.println("\n****************** TICKET DE COMPRA ******************");
                     System.out.println(respuesta);
-                    System.out.println("========================");
+                    System.out.println("******************************************************");
                     
                     System.out.println("\nCompra finalizada. ¡Gracias por tu compra!");
                     break;
-                }else {
+                }else if (opcion == 6) {
+                    String comando = "SALIR";
+                    out.write(comando.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                    System.out.println("Cerrando sesión y devolviendo productos...");
+                    socketCliente.close();
+                    System.out.println("Conexión cerrada correctamente.");
+                    break; 
+                }
+                else {
                     System.out.println("Opcion no valida");
                 }
             }

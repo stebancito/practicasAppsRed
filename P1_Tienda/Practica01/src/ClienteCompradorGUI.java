@@ -1,560 +1,524 @@
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.*;
-import java.io.*;
-import java.net.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
-public class ClienteCompradorGUI {
+public class ClienteCompradorGUI extends JFrame {
     private Socket socketCliente;
     private DataInputStream in;
     private DataOutputStream out;
-    private JFrame frame;
-    private JPanel panelPrincipal;
-    private CardLayout cardLayout;
-    private boolean conectado = false;
     
-    // Áreas de texto separadas para cada panel
-    private JTextArea textAreaBuscar;
-    private JTextArea textAreaListar;
-    private JTextArea textAreaAgregar;
-    private JTextArea textAreaCarrito;
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new ClienteCompradorGUI().iniciar());
+    // Componentes principales
+    private JTextArea textArea;
+    private JPanel mainPanel;
+    private CardLayout cardLayout;
+    
+    // Paneles
+    private JPanel menuPanel;
+    private JPanel buscarPanel;
+    private JPanel listarPanel;
+    private JPanel carritoPanel;
+    
+    // Colores para una interfaz moderna
+    private final Color PRIMARY_COLOR = new Color(41, 128, 185);
+    private final Color SECONDARY_COLOR = new Color(52, 152, 219);
+    private final Color BACKGROUND_COLOR = new Color(245, 245, 245);
+    private final Color TEXT_COLOR = new Color(51, 51, 51);
+    private final Color SUCCESS_COLOR = new Color(39, 174, 96);
+    
+    public ClienteCompradorGUI() {
+        initializeGUI();
+        connectToServer();
     }
-
-    public void iniciar() {
-        crearGUI();
-        conectarServidor();
-    }
-
-    private void conectarServidor() {
+    
+    private void initializeGUI() {
+        setTitle("Tienda Online - Cliente");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(900, 700);
+        setLocationRelativeTo(null);
+        
+        // Configurar look and feel para Ubuntu
         try {
-            socketCliente = new Socket("127.0.0.1", 8080);
+            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
+        // Panel principal con CardLayout
+        cardLayout = new CardLayout();
+        mainPanel = new JPanel(cardLayout);
+        mainPanel.setBackground(BACKGROUND_COLOR);
+        
+        crearMenuPrincipal();
+        crearPanelBuscar();
+        crearPanelListar();
+        crearPanelCarrito();
+        
+        // Área de texto para mostrar respuestas
+        textArea = new JTextArea();
+        textArea.setEditable(false);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        textArea.setFont(new Font("DejaVu Sans", Font.PLAIN, 12));
+        textArea.setBackground(new Color(253, 253, 253));
+        textArea.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new Dimension(800, 200));
+        
+        // Layout principal
+        setLayout(new BorderLayout());
+        add(mainPanel, BorderLayout.CENTER);
+        add(scrollPane, BorderLayout.SOUTH);
+        
+        // Mostrar menú principal por defecto
+        cardLayout.show(mainPanel, "MENU");
+    }
+    
+    private void crearMenuPrincipal() {
+        menuPanel = new JPanel();
+        menuPanel.setLayout(new GridBagLayout());
+        menuPanel.setBackground(BACKGROUND_COLOR);
+        menuPanel.setBorder(new EmptyBorder(40, 40, 40, 40));
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(10, 0, 10, 0);
+        
+        // Título
+        JLabel titulo = new JLabel("TIENDA ONLINE", SwingConstants.CENTER);
+        titulo.setFont(new Font("DejaVu Sans", Font.BOLD, 28));
+        titulo.setForeground(PRIMARY_COLOR);
+        gbc.insets = new Insets(0, 0, 30, 0);
+        menuPanel.add(titulo, gbc);
+        
+        gbc.insets = new Insets(8, 0, 8, 0);
+        
+        // Botones del menú
+        String[] opciones = {
+            "Buscar Producto",
+            "Listar por Tipo", 
+            "Agregar al Carrito",
+            "Editar Carrito",
+            "Finalizar Compra",
+            "Salir"
+        };
+        
+        for (String opcion : opciones) {
+            JButton btn = crearBotonModerno(opcion);
+            btn.addActionListener(new MenuListener());
+            menuPanel.add(btn, gbc);
+        }
+        
+        mainPanel.add(menuPanel, "MENU");
+    }
+    
+    private void crearPanelBuscar() {
+        buscarPanel = new JPanel(new BorderLayout());
+        buscarPanel.setBackground(BACKGROUND_COLOR);
+        buscarPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        
+        // Panel superior
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.setBackground(BACKGROUND_COLOR);
+        
+        JButton backBtn = crearBotonModerno("Volver");
+        backBtn.addActionListener(e -> cardLayout.show(mainPanel, "MENU"));
+        
+        JLabel titulo = new JLabel("Buscar Producto");
+        titulo.setFont(new Font("DejaVu Sans", Font.BOLD, 20));
+        titulo.setForeground(TEXT_COLOR);
+        
+        topPanel.add(backBtn);
+        topPanel.add(Box.createHorizontalStrut(20));
+        topPanel.add(titulo);
+        
+        // Panel de búsqueda
+        JPanel searchPanel = new JPanel();
+        searchPanel.setLayout(new BoxLayout(searchPanel, BoxLayout.Y_AXIS));
+        searchPanel.setBackground(BACKGROUND_COLOR);
+        searchPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
+        
+        JLabel instruccion = new JLabel("Ingresa el nombre o marca del producto:");
+        instruccion.setFont(new Font("DejaVu Sans", Font.PLAIN, 14));
+        instruccion.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JTextField searchField = new JTextField(20);
+        searchField.setFont(new Font("DejaVu Sans", Font.PLAIN, 14));
+        searchField.setMaximumSize(new Dimension(400, 35));
+        searchField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JButton searchBtn = crearBotonModerno("Buscar");
+        searchBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        searchBtn.addActionListener(e -> {
+            String producto = searchField.getText().trim();
+            if (!producto.isEmpty()) {
+                enviarComando("BUSCAR " + producto);
+            } else {
+                mostrarError("Por favor ingresa un término de búsqueda");
+            }
+        });
+        
+        searchPanel.add(instruccion);
+        searchPanel.add(Box.createVerticalStrut(10));
+        searchPanel.add(searchField);
+        searchPanel.add(Box.createVerticalStrut(15));
+        searchPanel.add(searchBtn);
+        
+        buscarPanel.add(topPanel, BorderLayout.NORTH);
+        buscarPanel.add(searchPanel, BorderLayout.CENTER);
+        
+        mainPanel.add(buscarPanel, "BUSCAR");
+    }
+    
+    private void crearPanelListar() {
+        listarPanel = new JPanel(new BorderLayout());
+        listarPanel.setBackground(BACKGROUND_COLOR);
+        listarPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        
+        // Panel superior
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.setBackground(BACKGROUND_COLOR);
+        
+        JButton backBtn = crearBotonModerno("Volver");
+        backBtn.addActionListener(e -> cardLayout.show(mainPanel, "MENU"));
+        
+        JLabel titulo = new JLabel("Listar por Tipo");
+        titulo.setFont(new Font("DejaVu Sans", Font.BOLD, 20));
+        titulo.setForeground(TEXT_COLOR);
+        
+        topPanel.add(backBtn);
+        topPanel.add(Box.createHorizontalStrut(20));
+        topPanel.add(titulo);
+        
+        // Panel de tipos
+        JPanel typesPanel = new JPanel();
+        typesPanel.setLayout(new BoxLayout(typesPanel, BoxLayout.Y_AXIS));
+        typesPanel.setBackground(BACKGROUND_COLOR);
+        typesPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
+        
+        JLabel instruccion = new JLabel("Selecciona el tipo de producto:");
+        instruccion.setFont(new Font("DejaVu Sans", Font.PLAIN, 14));
+        instruccion.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Tipos de productos comunes
+        String[] tipos = {
+            "Laptop", "Smartphone", "Monitor", "Periferico", 
+            "Impresora", "Televisor", "Consola", "Tablet",
+            "Red", "Almacenamiento", "Componente", "Wearable"
+        };
+        
+        JPanel buttonsPanel = new JPanel(new GridLayout(0, 2, 10, 10));
+        buttonsPanel.setBackground(BACKGROUND_COLOR);
+        buttonsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        buttonsPanel.setMaximumSize(new Dimension(400, 300));
+        
+        for (String tipo : tipos) {
+            JButton btn = crearBotonModerno(tipo);
+            btn.addActionListener(e -> enviarComando("LISTAR " + tipo));
+            buttonsPanel.add(btn);
+        }
+        
+        typesPanel.add(instruccion);
+        typesPanel.add(Box.createVerticalStrut(15));
+        typesPanel.add(buttonsPanel);
+        
+        listarPanel.add(topPanel, BorderLayout.NORTH);
+        listarPanel.add(typesPanel, BorderLayout.CENTER);
+        
+        mainPanel.add(listarPanel, "LISTAR");
+    }
+    
+    private void crearPanelCarrito() {
+        carritoPanel = new JPanel(new BorderLayout());
+        carritoPanel.setBackground(BACKGROUND_COLOR);
+        carritoPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
+        
+        // Panel superior
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.setBackground(BACKGROUND_COLOR);
+        
+        JButton backBtn = crearBotonModerno("Volver");
+        backBtn.addActionListener(e -> cardLayout.show(mainPanel, "MENU"));
+        
+        JLabel titulo = new JLabel("Gestionar Carrito");
+        titulo.setFont(new Font("DejaVu Sans", Font.BOLD, 20));
+        titulo.setForeground(TEXT_COLOR);
+        
+        topPanel.add(backBtn);
+        topPanel.add(Box.createHorizontalStrut(20));
+        topPanel.add(titulo);
+        
+        // Panel de opciones del carrito
+        JPanel optionsPanel = new JPanel();
+        optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
+        optionsPanel.setBackground(BACKGROUND_COLOR);
+        optionsPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
+        
+        // Agregar producto
+        JPanel addPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        addPanel.setBackground(BACKGROUND_COLOR);
+        
+        JLabel addLabel = new JLabel("Agregar producto (ID):");
+        addLabel.setFont(new Font("DejaVu Sans", Font.PLAIN, 14));
+        
+        JTextField idField = new JTextField(10);
+        idField.setFont(new Font("DejaVu Sans", Font.PLAIN, 14));
+        
+        JButton addBtn = crearBotonModerno("Agregar");
+        addBtn.addActionListener(e -> {
+            String id = idField.getText().trim();
+            if (!id.isEmpty() && id.matches("\\d+")) {
+                enviarComando("AGREGAR " + id);
+                idField.setText("");
+            } else {
+                mostrarError("Por favor ingresa un ID válido (número)");
+            }
+        });
+        
+        addPanel.add(addLabel);
+        addPanel.add(idField);
+        addPanel.add(addBtn);
+        
+        // Editar carrito
+        JPanel editPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        editPanel.setBackground(BACKGROUND_COLOR);
+        
+        JButton editBtn = crearBotonModerno("Editar Carrito");
+        editBtn.addActionListener(e -> {
+            enviarComando("EDITAR");
+        });
+        
+        editPanel.add(editBtn);
+        
+        // Finalizar compra
+        JPanel buyPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buyPanel.setBackground(BACKGROUND_COLOR);
+        
+        JButton buyBtn = crearBotonModerno("Finalizar Compra");
+        buyBtn.setBackground(SUCCESS_COLOR);
+        buyBtn.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "¿Estás seguro de que quieres finalizar la compra?",
+                "Confirmar Compra",
+                JOptionPane.YES_NO_OPTION
+            );
+            if (confirm == JOptionPane.YES_OPTION) {
+                enviarComando("COMPRAR");
+            }
+        });
+        
+        buyPanel.add(buyBtn);
+        
+        optionsPanel.add(addPanel);
+        optionsPanel.add(Box.createVerticalStrut(20));
+        optionsPanel.add(editPanel);
+        optionsPanel.add(Box.createVerticalStrut(20));
+        optionsPanel.add(buyPanel);
+        
+        carritoPanel.add(topPanel, BorderLayout.NORTH);
+        carritoPanel.add(optionsPanel, BorderLayout.CENTER);
+        
+        mainPanel.add(carritoPanel, "CARRITO");
+    }
+    
+    private JButton crearBotonModerno(String texto) {
+        JButton button = new JButton(texto);
+        button.setFont(new Font("DejaVu Sans", Font.BOLD, 14));
+        button.setBackground(PRIMARY_COLOR);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(200, 45));
+        button.setMaximumSize(new Dimension(200, 45));
+        
+        // Efecto hover
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                button.setBackground(SECONDARY_COLOR);
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                button.setBackground(PRIMARY_COLOR);
+            }
+        });
+        
+        return button;
+    }
+    
+    private void connectToServer() {
+        final String HOST = "127.0.0.1";
+        final int PUERTO = 8080;
+        
+        try {
+            socketCliente = new Socket(HOST, PUERTO);
             in = new DataInputStream(socketCliente.getInputStream());
             out = new DataOutputStream(socketCliente.getOutputStream());
-            conectado = true;
-            System.out.println("Conectado al servidor en 127.0.0.1:8080");
+            
+            mostrarMensaje("Conectado al servidor en " + HOST + ":" + PUERTO);
+            
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(null, 
-                "Error al conectar con el servidor: " + e.getMessage() + 
-                "\nAsegúrate de que el servidor esté ejecutándose.", 
-                "Error de Conexión", 
+            mostrarError("No se pudo conectar al servidor: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, 
+                "No se pudo conectar al servidor. Asegúrate de que el servidor esté ejecutándose.",
+                "Error de Conexión",
                 JOptionPane.ERROR_MESSAGE);
-            conectado = false;
+            System.exit(1);
         }
     }
-
-    private void crearGUI() {
-        frame = new JFrame("Tienda Online - Cliente Comprador");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(900, 700);
-        frame.setLocationRelativeTo(null);
-
-        cardLayout = new CardLayout();
-        panelPrincipal = new JPanel(cardLayout);
-
-        panelPrincipal.add(crearPanelMenuPrincipal(), "menu");
-        panelPrincipal.add(crearPanelBuscar(), "buscar");
-        panelPrincipal.add(crearPanelListar(), "listar");
-        panelPrincipal.add(crearPanelAgregarCarrito(), "agregar");
-        panelPrincipal.add(crearPanelCarrito(), "carrito");
-
-        frame.add(panelPrincipal);
-        frame.setVisible(true);
-
-        frame.addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                cerrarConexion();
-            }
-        });
-    }
-
-    private JPanel crearPanelMenuPrincipal() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
-
-        JLabel titulo = new JLabel("🛒 TIENDA ONLINE", JLabel.CENTER);
-        titulo.setFont(new Font("Arial", Font.BOLD, 28));
-        titulo.setBorder(BorderFactory.createEmptyBorder(0, 0, 30, 0));
-        panel.add(titulo, BorderLayout.NORTH);
-
-        JPanel panelBotones = new JPanel(new GridLayout(5, 1, 15, 15));
-        panelBotones.setBorder(BorderFactory.createEmptyBorder(20, 50, 20, 50));
-
-        String[] opciones = {
-            "🔍 Buscar Productos",
-            "📋 Listar Productos por Tipo", 
-            "🛒 Agregar al Carrito",
-            "✏️ Editar Carrito",
-            "💰 Finalizar Compra"
-        };
-
-        for (String opcion : opciones) {
-            JButton boton = new JButton(opcion);
-            boton.setFont(new Font("Arial", Font.PLAIN, 18));
-            boton.setPreferredSize(new Dimension(300, 60));
-            boton.addActionListener(e -> manejarOpcionMenu(boton.getText()));
-            panelBotones.add(boton);
-        }
-
-        panel.add(panelBotones, BorderLayout.CENTER);
-
-        JLabel estadoConexion = new JLabel(conectado ? "✅ Conectado al servidor" : "❌ No conectado", JLabel.CENTER);
-        estadoConexion.setFont(new Font("Arial", Font.ITALIC, 12));
-        estadoConexion.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
-        panel.add(estadoConexion, BorderLayout.SOUTH);
-
-        return panel;
-    }
-
-    private void manejarOpcionMenu(String textoBoton) {
-        if (!conectado) {
-            JOptionPane.showMessageDialog(frame, 
-                "No hay conexión con el servidor.\nReinicia la aplicación cuando el servidor esté disponible.", 
-                "Error de Conexión", 
-                JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        switch (textoBoton) {
-            case "🔍 Buscar Productos":
-                cardLayout.show(panelPrincipal, "buscar");
-                break;
-            case "📋 Listar Productos por Tipo":
-                cardLayout.show(panelPrincipal, "listar");
-                break;
-            case "🛒 Agregar al Carrito":
-                cardLayout.show(panelPrincipal, "agregar");
-                break;
-            case "✏️ Editar Carrito":
-                cardLayout.show(panelPrincipal, "carrito");
-                verCarrito();
-                break;
-            case "💰 Finalizar Compra":
-                finalizarCompra();
-                break;
-        }
-    }
-
-    private JPanel crearPanelBuscar() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        JPanel panelSuperior = new JPanel(new BorderLayout(10, 10));
-        
-        JLabel label = new JLabel("Buscar producto por nombre o marca:");
-        label.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JTextField campoBusqueda = new JTextField(20);
-        campoBusqueda.setFont(new Font("Arial", Font.PLAIN, 14));
-        
-        JButton botonBuscar = new JButton("🔍 Buscar");
-        botonBuscar.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JButton botonVolver = new JButton("← Volver al Menú");
-        botonVolver.setFont(new Font("Arial", Font.PLAIN, 12));
-
-        JPanel panelControles = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panelControles.add(label);
-        panelControles.add(campoBusqueda);
-        panelControles.add(botonBuscar);
-
-        panelSuperior.add(panelControles, BorderLayout.CENTER);
-        panelSuperior.add(botonVolver, BorderLayout.WEST);
-
-        // Área de texto específica para buscar
-        textAreaBuscar = new JTextArea();
-        textAreaBuscar.setEditable(false);
-        textAreaBuscar.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        textAreaBuscar.setLineWrap(true);
-        textAreaBuscar.setWrapStyleWord(true);
-        
-        JScrollPane scrollPane = new JScrollPane(textAreaBuscar);
-        scrollPane.setPreferredSize(new Dimension(800, 500));
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Resultados de la Búsqueda"));
-
-        panel.add(panelSuperior, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        botonBuscar.addActionListener(e -> {
-            String busqueda = campoBusqueda.getText().trim();
-            if (!busqueda.isEmpty()) {
-                buscarProducto(busqueda);
-            } else {
-                JOptionPane.showMessageDialog(frame, 
-                    "Por favor ingresa un término de búsqueda.", 
-                    "Búsqueda Vacía", 
-                    JOptionPane.WARNING_MESSAGE);
-            }
-        });
-
-        campoBusqueda.addActionListener(e -> botonBuscar.doClick());
-
-        botonVolver.addActionListener(e -> {
-            campoBusqueda.setText("");
-            textAreaBuscar.setText("");
-            cardLayout.show(panelPrincipal, "menu");
-        });
-
-        return panel;
-    }
-
-    private JPanel crearPanelListar() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        JPanel panelSuperior = new JPanel(new BorderLayout(10, 10));
-        
-        JLabel label = new JLabel("Seleccione el tipo de producto:");
-        label.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        String[] tipos = {"Laptop", "Smartphone", "Monitor", "Periférico", "Impresora", "Televisor", "Consola"};
-        JComboBox<String> comboTipos = new JComboBox<>(tipos);
-        comboTipos.setFont(new Font("Arial", Font.PLAIN, 14));
-        
-        JButton botonListar = new JButton("📋 Listar");
-        botonListar.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JButton botonVolver = new JButton("← Volver al Menú");
-        botonVolver.setFont(new Font("Arial", Font.PLAIN, 12));
-
-        JPanel panelControles = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panelControles.add(label);
-        panelControles.add(comboTipos);
-        panelControles.add(botonListar);
-
-        panelSuperior.add(panelControles, BorderLayout.CENTER);
-        panelSuperior.add(botonVolver, BorderLayout.WEST);
-
-        // Área de texto específica para listar
-        textAreaListar = new JTextArea();
-        textAreaListar.setEditable(false);
-        textAreaListar.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        textAreaListar.setLineWrap(true);
-        textAreaListar.setWrapStyleWord(true);
-        
-        JScrollPane scrollPane = new JScrollPane(textAreaListar);
-        scrollPane.setPreferredSize(new Dimension(800, 500));
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Productos Encontrados"));
-
-        panel.add(panelSuperior, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        botonListar.addActionListener(e -> {
-            String tipo = (String) comboTipos.getSelectedItem();
-            listarProductos(tipo);
-        });
-
-        botonVolver.addActionListener(e -> {
-            textAreaListar.setText("");
-            cardLayout.show(panelPrincipal, "menu");
-        });
-
-        return panel;
-    }
-
-    private JPanel crearPanelAgregarCarrito() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        JPanel panelSuperior = new JPanel(new BorderLayout(10, 10));
-        
-        JLabel label = new JLabel("Ingrese el ID del producto a agregar:");
-        label.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JTextField campoId = new JTextField(10);
-        campoId.setFont(new Font("Arial", Font.PLAIN, 14));
-        
-        JButton botonAgregar = new JButton("🛒 Agregar al Carrito");
-        botonAgregar.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JButton botonVolver = new JButton("← Volver al Menú");
-        botonVolver.setFont(new Font("Arial", Font.PLAIN, 12));
-
-        JPanel panelControles = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panelControles.add(label);
-        panelControles.add(campoId);
-        panelControles.add(botonAgregar);
-
-        panelSuperior.add(panelControles, BorderLayout.CENTER);
-        panelSuperior.add(botonVolver, BorderLayout.WEST);
-
-        // Área de texto específica para agregar
-        textAreaAgregar = new JTextArea();
-        textAreaAgregar.setEditable(false);
-        textAreaAgregar.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        textAreaAgregar.setLineWrap(true);
-        textAreaAgregar.setWrapStyleWord(true);
-        
-        JScrollPane scrollPane = new JScrollPane(textAreaAgregar);
-        scrollPane.setPreferredSize(new Dimension(800, 500));
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Respuesta del Servidor"));
-
-        panel.add(panelSuperior, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        botonAgregar.addActionListener(e -> {
-            String id = campoId.getText().trim();
-            if (!id.isEmpty()) {
-                if (id.matches("\\d+")) {
-                    agregarAlCarrito(id);
-                    campoId.setText("");
-                } else {
-                    JOptionPane.showMessageDialog(frame, 
-                        "El ID debe ser un número.", 
-                        "ID Inválido", 
-                        JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(frame, 
-                    "Por favor ingresa un ID de producto.", 
-                    "ID Vacío", 
-                    JOptionPane.WARNING_MESSAGE);
-            }
-        });
-
-        campoId.addActionListener(e -> botonAgregar.doClick());
-
-        botonVolver.addActionListener(e -> {
-            campoId.setText("");
-            textAreaAgregar.setText("");
-            cardLayout.show(panelPrincipal, "menu");
-        });
-
-        return panel;
-    }
-
-    private JPanel crearPanelCarrito() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 10));
-        
-        JButton botonVerCarrito = new JButton("🔄 Actualizar Carrito");
-        botonVerCarrito.setFont(new Font("Arial", Font.BOLD, 14));
-        
-        JButton botonFinalizar = new JButton("💰 Finalizar Compra");
-        botonFinalizar.setFont(new Font("Arial", Font.BOLD, 14));
-        botonFinalizar.setBackground(new Color(50, 150, 50));
-        botonFinalizar.setForeground(Color.WHITE);
-        
-        JButton botonVolver = new JButton("← Volver al Menú");
-        botonVolver.setFont(new Font("Arial", Font.PLAIN, 12));
-
-        panelBotones.add(botonVerCarrito);
-        panelBotones.add(botonFinalizar);
-        panelBotones.add(botonVolver);
-
-        // Área de texto específica para carrito
-        textAreaCarrito = new JTextArea();
-        textAreaCarrito.setEditable(false);
-        textAreaCarrito.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        textAreaCarrito.setLineWrap(true);
-        textAreaCarrito.setWrapStyleWord(true);
-        
-        JScrollPane scrollPane = new JScrollPane(textAreaCarrito);
-        scrollPane.setPreferredSize(new Dimension(800, 500));
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Tu Carrito de Compras"));
-
-        panel.add(panelBotones, BorderLayout.NORTH);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        botonVerCarrito.addActionListener(e -> verCarrito());
-        
-        botonFinalizar.addActionListener(e -> finalizarCompra());
-        
-        botonVolver.addActionListener(e -> {
-            textAreaCarrito.setText("");
-            cardLayout.show(panelPrincipal, "menu");
-        });
-
-        return panel;
-    }
-
-    private void buscarProducto(String producto) {
+    
+    private void enviarComando(String comando) {
         try {
-            textAreaBuscar.setText("Buscando productos...");
-            String comando = "BUSCAR " + producto;
             out.write(comando.getBytes(StandardCharsets.UTF_8));
             out.flush();
-
-            byte[] buf = new byte[8192];
-            int n = in.read(buf);
-            if (n > 0) {
-                String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
-                textAreaBuscar.setText("Resultados para: '" + producto + "'\n\n" + respuesta);
-            } else {
-                textAreaBuscar.setText("No se recibió respuesta del servidor.");
-            }
+            mostrarMensaje("Enviado: " + comando);
             
-        } catch (SocketException e) {
-            manejarErrorConexion("Error de conexión durante la búsqueda: " + e.getMessage());
-        } catch (Exception e) {
-            textAreaBuscar.setText("Error al buscar producto: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void listarProductos(String tipo) {
-        try {
-            textAreaListar.setText("Cargando productos...");
-            String comando = "LISTAR " + tipo;
-            out.write(comando.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-
-            byte[] buf = new byte[8192];
-            int n = in.read(buf);
-            if (n > 0) {
-                String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
-                textAreaListar.setText("Productos de tipo: '" + tipo + "'\n\n" + respuesta);
-            } else {
-                textAreaListar.setText("No se recibió respuesta del servidor.");
-            }
-            
-        } catch (SocketException e) {
-            manejarErrorConexion("Error de conexión al listar productos: " + e.getMessage());
-        } catch (Exception e) {
-            textAreaListar.setText("Error al listar productos: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void agregarAlCarrito(String id) {
-        try {
-            textAreaAgregar.setText("Agregando producto al carrito...");
-            String comando = "AGREGAR " + id;
-            out.write(comando.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-
+            // Recibir respuesta
             byte[] buf = new byte[4096];
             int n = in.read(buf);
             if (n > 0) {
                 String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
-                textAreaAgregar.setText("Respuesta del servidor:\n\n" + respuesta);
-            } else {
-                textAreaAgregar.setText("No se recibió respuesta del servidor.");
-            }
-            
-        } catch (SocketException e) {
-            manejarErrorConexion("Error de conexión al agregar al carrito: " + e.getMessage());
-        } catch (Exception e) {
-            textAreaAgregar.setText("Error al agregar al carrito: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void verCarrito() {
-        try {
-            textAreaCarrito.setText("Cargando carrito...");
-            String comando = "EDITAR";
-            out.write(comando.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-
-            byte[] buf = new byte[8192];
-            int n = in.read(buf);
-            if (n > 0) {
-                String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
-                textAreaCarrito.setText("🛒 Tu Carrito de Compras:\n\n" + respuesta);
-            } else {
-                textAreaCarrito.setText("No se recibió respuesta del servidor.");
-            }
-            
-        } catch (SocketException e) {
-            manejarErrorConexion("Error de conexión al cargar el carrito: " + e.getMessage());
-        } catch (Exception e) {
-            textAreaCarrito.setText("Error al cargar el carrito: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void finalizarCompra() {
-        int confirmacion = JOptionPane.showConfirmDialog(frame,
-            "¿Estás seguro de que quieres finalizar la compra?\nEsta acción no se puede deshacer.",
-            "Confirmar Compra",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.QUESTION_MESSAGE);
-            
-        if (confirmacion != JOptionPane.YES_OPTION) {
-            return;
-        }
-
-        try {
-            textAreaCarrito.setText("Procesando compra...");
-            String comando = "COMPRAR";
-            out.write(comando.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-
-            byte[] buf = new byte[16384];
-            int n = in.read(buf);
-            
-            if (n == -1) {
-                textAreaCarrito.setText("El servidor cerró la conexión antes de enviar el ticket.");
-                return;
-            }
-
-            if (n > 0) {
-                String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+                mostrarMensaje("Servidor: " + respuesta);
                 
-                mostrarTicketCompra(respuesta);
-                
-                textAreaCarrito.setText("✅ Compra finalizada. ¡Gracias por tu compra!\n\n" + respuesta);
-                
-                int opcion = JOptionPane.showConfirmDialog(frame,
-                    "¿Quieres salir de la aplicación?",
-                    "Compra Finalizada",
-                    JOptionPane.YES_NO_OPTION);
-                    
-                if (opcion == JOptionPane.YES_OPTION) {
-                    cerrarConexion();
-                    System.exit(0);
+                // Manejar casos especiales
+                if (comando.equals("EDITAR") && !respuesta.contains("Debes tener un carrito")) {
+                    manejarEdicionCarrito(respuesta);
+                } else if (comando.equals("COMPRAR")) {
+                    mostrarTicket(respuesta);
                 }
-            } else {
-                textAreaCarrito.setText("No se recibió ticket del servidor.");
             }
-            
-        } catch (SocketException e) {
-            manejarErrorConexion("Error de conexión al finalizar compra: " + e.getMessage());
-        } catch (Exception e) {
-            textAreaCarrito.setText("Error al finalizar compra: " + e.getMessage());
-            e.printStackTrace();
+        } catch (IOException e) {
+            mostrarError("Error de comunicación: " + e.getMessage());
         }
-    }
-
-    private void mostrarTicketCompra(String ticket) {
-        JTextArea ticketArea = new JTextArea(ticket);
-        ticketArea.setEditable(false);
-        ticketArea.setFont(new Font("Monospaced", Font.BOLD, 12));
-        ticketArea.setBackground(new Color(240, 240, 240));
-        
-        JScrollPane scrollPane = new JScrollPane(ticketArea);
-        scrollPane.setPreferredSize(new Dimension(600, 400));
-        
-        JOptionPane.showMessageDialog(frame, scrollPane, "🎫 TICKET DE COMPRA - ¡GRACIAS POR SU COMPRA!", JOptionPane.INFORMATION_MESSAGE);
-    }
-
-    private void manejarErrorConexion(String mensaje) {
-        conectado = false;
-        JOptionPane.showMessageDialog(frame, 
-            mensaje + "\n\nLa aplicación se cerrará.", 
-            "Error de Conexión", 
-            JOptionPane.ERROR_MESSAGE);
-        cerrarConexion();
-        System.exit(1);
     }
     
-    private void cerrarConexion() {
+    private void manejarEdicionCarrito(String carritoActual) {
+        String idProducto = JOptionPane.showInputDialog(
+            this,
+            "Carrito actual:\n" + carritoActual + "\n\nIngresa el ID del producto a eliminar:",
+            "Editar Carrito",
+            JOptionPane.QUESTION_MESSAGE
+        );
+        
+        if (idProducto != null && !idProducto.trim().isEmpty()) {
+            try {
+                out.write(idProducto.trim().getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                
+                byte[] buf = new byte[4096];
+                int n = in.read(buf);
+                if (n > 0) {
+                    String respuesta = new String(buf, 0, n, StandardCharsets.UTF_8).trim();
+                    mostrarMensaje("Servidor: " + respuesta);
+                }
+            } catch (IOException e) {
+                mostrarError("Error al editar carrito: " + e.getMessage());
+            }
+        }
+    }
+    
+    private void mostrarTicket(String ticket) {
+        JTextArea ticketArea = new JTextArea(ticket);
+        ticketArea.setEditable(false);
+        ticketArea.setFont(new Font("DejaVu Sans Mono", Font.PLAIN, 12));
+        
+        JScrollPane scrollPane = new JScrollPane(ticketArea);
+        scrollPane.setPreferredSize(new Dimension(500, 400));
+        
+        JOptionPane.showMessageDialog(
+            this,
+            scrollPane,
+            "Ticket de Compra",
+            JOptionPane.INFORMATION_MESSAGE
+        );
+        
+        // Preguntar si quiere salir
+        int opcion = JOptionPane.showConfirmDialog(
+            this,
+            "¿Quieres salir de la aplicación?",
+            "Compra Finalizada",
+            JOptionPane.YES_NO_OPTION
+        );
+        
+        if (opcion == JOptionPane.YES_OPTION) {
+            salir();
+        }
+    }
+    
+    private void mostrarMensaje(String mensaje) {
+        textArea.append(mensaje + "\n\n");
+        textArea.setCaretPosition(textArea.getDocument().getLength());
+    }
+    
+    private void mostrarError(String error) {
+        textArea.append("ERROR: " + error + "\n\n");
+        textArea.setCaretPosition(textArea.getDocument().getLength());
+        JOptionPane.showMessageDialog(this, error, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+    
+    private void salir() {
         try {
-            if (out != null) out.close();
-            if (in != null) in.close();
+            if (out != null) {
+                out.write("SALIR".getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
             if (socketCliente != null && !socketCliente.isClosed()) {
                 socketCliente.close();
             }
-            System.out.println("Conexión cerrada correctamente");
         } catch (IOException e) {
-            System.err.println("Error al cerrar conexión: " + e.getMessage());
+            e.printStackTrace();
         }
+        System.exit(0);
+    }
+    
+    // Listener para los botones del menú
+    private class MenuListener implements ActionListener {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            String comando = ((JButton) e.getSource()).getText();
+            
+            switch (comando) {
+                case "Buscar Producto":
+                    cardLayout.show(mainPanel, "BUSCAR");
+                    break;
+                case "Listar por Tipo":
+                    cardLayout.show(mainPanel, "LISTAR");
+                    break;
+                case "Agregar al Carrito":
+                case "Editar Carrito":
+                case "Finalizar Compra":
+                    cardLayout.show(mainPanel, "CARRITO");
+                    break;
+                case "Salir":
+                    int confirm = JOptionPane.showConfirmDialog(
+                        ClienteCompradorGUI.this,
+                        "¿Estás seguro de que quieres salir?",
+                        "Confirmar Salida",
+                        JOptionPane.YES_NO_OPTION
+                    );
+                    if (confirm == JOptionPane.YES_OPTION) {
+                        salir();
+                    }
+                    break;
+            }
+        }
+    }
+    
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            new ClienteCompradorGUI().setVisible(true);
+        });
     }
 }

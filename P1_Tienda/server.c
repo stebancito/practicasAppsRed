@@ -105,6 +105,7 @@ int main(){
 
                 if(strncmp(buffer, "SALIR", 5) == 0){
                     printf("S: Cliente pidió salir.\n");
+                    devolverProductosCarrito(cliente.carrito);
                     break;
                 }else{
                     procesarPeticion(buffer, nbytes, cliente);
@@ -113,16 +114,16 @@ int main(){
 
             if (nbytes == 0) {
                 printf("\n\033[31mS: El cliente cerró la conexión.\n\033[0m");
-                json_decref(cliente.carrito); // liberar memoria al final
-
+                devolverProductosCarrito(cliente.carrito);
             } else if (nbytes == -1) {
                 perror("recv");
             }
 
-
             close(cliente.socket);
+            json_decref(cliente.carrito);
             printf("S: Conexión con cliente cerrada.\n");
-            json_decref(cliente.carrito); // liberar memoria al final
+            printf("--------------------------------------------------\n\n");
+
 
         }    
 

@@ -249,7 +249,7 @@ void agregarProducto(json_t *carrito, json_t *producto) {
     }
     int id_nuevo = json_integer_value(id_json);
 
-    // Verificar si ya está en el carrito
+    // ya esta en el carrito?
     size_t i;
     json_t *item;
     for (i = 0; i < json_array_size(carrito); i++) {
@@ -319,7 +319,7 @@ void agregarCarrito(S_Cliente *cliente, const char *nombreProducto, char **respu
 }
 
 /* 
-    Función para decrementar o eliminar producto del carrito del cliente.
+    Funcion para decrementar o eliminar producto del carrito del cliente.
     Si la cantidad > 1 la reduce.
     Si la cantidad = 1 elimina el producto del carrito.
     Devuelve la existencia al stock de la BD.
@@ -376,35 +376,6 @@ void editarCarrito(S_Cliente *cliente, const char *idProducto, char **respuesta)
     json_decref(json_final);
 }
 
-void generarTicket(S_Cliente *cliente, char **respuesta) {
-    if (!cliente || !cliente->carrito || json_array_size(cliente->carrito) == 0) {
-        *respuesta = strdup("{\"error\":\"El carrito está vacío o no disponible\"}");
-        return;
-    }
-
-    json_t *ticket = json_object();
-    json_t *items = json_array();
-
-    double total_general = 0.0;
-
-    /* procesamiento de cada producto del carrito */
-    for (size_t i = 0; i < json_array_size(cliente->carrito); i++) {
-        json_t *item = json_array_get(cliente->carrito, i);
-        json_t *obj = generarDetalleProducto(item, &total_general);
-        if (obj) json_array_append_new(items, obj);
-    }
-
-    json_object_set_new(ticket, "productos", items);
-    json_object_set_new(ticket, "total", json_real(total_general));
-    json_object_set_new(ticket, "mensaje", json_string("Compra finalizada con exito"));
-
-    *respuesta = json_dumps(ticket, JSON_INDENT(4));
-
-
-    json_array_clear(cliente->carrito);
-
-    json_decref(ticket);
-}
 
 json_t *generarDetalleProducto(json_t *producto, double *total_general) {
     if (!producto || !total_general) return NULL;
@@ -437,4 +408,55 @@ json_t *generarDetalleProducto(json_t *producto, double *total_general) {
     json_object_set_new(producto_ticket, "subtotal", json_real(subtotal));
 
     return producto_ticket;
+}
+
+
+void generarTicket(S_Cliente *cliente, char **respuesta) {
+    if (!cliente || !cliente->carrito || json_array_size(cliente->carrito) == 0) {
+        *respuesta = strdup("{\"error\":\"El carrito está vacío o no disponible\"}");
+        return;
+    }
+
+    json_t *ticket = json_object();
+    json_t *items = json_array();
+
+    double total_general = 0.0;
+
+    /* procesamiento de cada producto del carrito */
+    for (size_t i = 0; i < json_array_size(cliente->carrito); i++) {
+        json_t *item = json_array_get(cliente->carrito, i);
+        json_t *obj = generarDetalleProducto(item, &total_general);
+        if (obj) json_array_append_new(items, obj);
+    }
+
+    json_object_set_new(ticket, "productos", items);
+    json_object_set_new(ticket, "total", json_real(total_general));
+    json_object_set_new(ticket, "mensaje", json_string("Compra finalizada con exito"));
+
+    *respuesta = json_dumps(ticket, JSON_INDENT(4));
+
+
+    json_array_clear(cliente->carrito);
+
+    json_decref(ticket);
+}
+
+
+/*
+    Devuelve las existencias de todos los productos en el carrito
+    cuando el cliente sale sin comprar.
+*/
+void devolverProductosCarrito(json_t *carrito) {
+    if (!carrito || !json_is_array(carrito)) return;
+
+    size_t index;
+    json_t *producto;
+    json_array_foreach(carrito, index, producto) {
+        json_t *id_json = json_object_get(producto, "id");
+        if (json_is_integer(id_json)) {
+            char id_str[20];
+            snprintf(id_str, sizeof(id_str), "%lld", json_integer_value(id_json));
+            devolverExistencia(id_str);
+        }
+    }
 }
