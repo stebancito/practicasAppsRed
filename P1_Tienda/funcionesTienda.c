@@ -249,7 +249,7 @@ void agregarProducto(json_t *carrito, json_t *producto) {
     }
     int id_nuevo = json_integer_value(id_json);
 
-    // Verificar si ya está en el carrito
+    // ya esta en el carrito?
     size_t i;
     json_t *item;
     for (i = 0; i < json_array_size(carrito); i++) {
@@ -319,7 +319,7 @@ void agregarCarrito(S_Cliente *cliente, const char *nombreProducto, char **respu
 }
 
 /* 
-    Función para decrementar o eliminar producto del carrito del cliente.
+    Funcion para decrementar o eliminar producto del carrito del cliente.
     Si la cantidad > 1 la reduce.
     Si la cantidad = 1 elimina el producto del carrito.
     Devuelve la existencia al stock de la BD.
@@ -440,3 +440,24 @@ void generarTicket(S_Cliente *cliente, char **respuesta) {
 
     json_decref(ticket);
 }
+
+
+/*
+    Devuelve las existencias de todos los productos en el carrito
+    cuando el cliente sale sin comprar.
+*/
+void devolverProductosCarrito(json_t *carrito) {
+    if (!carrito || !json_is_array(carrito)) return;
+
+    size_t index;
+    json_t *producto;
+    json_array_foreach(carrito, index, producto) {
+        json_t *id_json = json_object_get(producto, "id");
+        if (json_is_integer(id_json)) {
+            char id_str[20];
+            snprintf(id_str, sizeof(id_str), "%lld", json_integer_value(id_json));
+            devolverExistencia(id_str);
+        }
+    }
+}
+
