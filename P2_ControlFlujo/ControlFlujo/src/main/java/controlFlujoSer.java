@@ -1,12 +1,13 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
-public class vdUDPser {
+public class controlFlujoSer {
     private static final int PUERTO = 9876;
-    //private static final int TAMANO_PAQUETE = 512;
-    private static final int TIMEOUT = 3000; // ms
-    private static final double PROB_PERDIDA = 0.2; // pérdida simulada
+    private static final int TIMEOUT = 3000;
+    private static final double PROB_PERDIDA = 0.2;
 
     public static void main(String[] args) {
         Random random = new Random();
@@ -18,12 +19,11 @@ public class vdUDPser {
         System.out.print("Ingrese el tamaño de cada paquete en bytes: ");
         int TAMANO_PAQUETE = sc.nextInt();
 
-
         try (DatagramSocket socket = new DatagramSocket(PUERTO)) {
             socket.setReuseAddress(true);
             System.out.println("Servidor escuchando en el puerto " + PUERTO);
 
-            while (true) { // escucha indefinidamente
+            while (true) {
                 System.out.println("\nEsperando nuevo cliente...");
                 DatagramPacket inicioPkt = new DatagramPacket(new byte[1024], 1024);
                 socket.receive(inicioPkt);
@@ -36,60 +36,75 @@ public class vdUDPser {
 
                 InetAddress clienteDir = inicioPkt.getAddress();
                 int clientePuerto = inicioPkt.getPort();
-                System.out.println("\u001B[32m Cliente conectado: \u001B[0m" + clienteDir + ":" + clientePuerto);
+                System.out.println("\u001B[32mCliente conectado:\u001B[0m " + clienteDir + ":" + clientePuerto);
 
                 socket.setSoTimeout(TIMEOUT);
 
-                // Cargar archivo o generar datos
-                File archivo = new File("RH.mp3");
+                // ========================================
+                // 🗂️ Selector de archivo MP3 (JFileChooser)
+                // ========================================
+                File archivo = null;
+                JFileChooser chooser = new JFileChooser();
+                chooser.setDialogTitle("Seleccionar archivo MP3 a enviar");
+                chooser.setFileFilter(new FileNameExtensionFilter("Archivos MP3", "mp3"));
+                int resultado = chooser.showOpenDialog(null);
+
+                if (resultado == JFileChooser.APPROVE_OPTION) {
+                    archivo = chooser.getSelectedFile();
+                    System.out.println("\u001B[32mArchivo seleccionado:\u001B[0m " + archivo.getAbsolutePath());
+                } else {
+                    System.out.println("\u001B[31mNo se seleccionó ningún archivo. Se enviarán datos de prueba.\u001B[0m");
+                }
+
                 byte[] allData;
-                if (archivo.exists()) {
+                if (archivo != null && archivo.exists()) {
                     try (FileInputStream fis = new FileInputStream(archivo)) {
                         allData = fis.readAllBytes();
                     }
                 } else {
                     allData = new byte[3072];
                     for (int i = 0; i < allData.length; i++) allData[i] = (byte) (65 + (i % 26));
-                    System.out.println("texto.txt no encontrado — usando datos de prueba (" + allData.length + " bytes)");
+                    System.out.println("Archivo no encontrado — usando datos de prueba (" + allData.length + " bytes)");
                 }
 
-                // Dividiemos el archivo
                 List<byte[]> payloads = new ArrayList<>();
                 for (int offset = 0; offset < allData.length; offset += TAMANO_PAQUETE) {
                     int end = Math.min(allData.length, offset + TAMANO_PAQUETE);
                     payloads.add(Arrays.copyOfRange(allData, offset, end));
                 }
+
                 final int totalPaquetes = payloads.size();
                 System.out.println("Total de paquetes a enviar: " + totalPaquetes);
-
 
                 int base = 0;
                 int nextSeq = 0;
                 long timerStart = 0;
                 boolean timerOn = false;
+                int reintentos = 0;
+                final int MAX_REINTENTOS = 5;
+
                 Map<Integer, byte[]> buffer = new HashMap<>();
                 for (int i = 0; i < totalPaquetes; i++) buffer.put(i, payloads.get(i));
 
                 boolean sesionActiva = true;
                 while (sesionActiva) {
-                    // Enviar hasta llenar ventana
                     System.out.println("\u001B[36m---------- ENVIANDO VENTANA ----------\u001B[0m");
                     while (nextSeq < base + VENTANA && nextSeq < totalPaquetes) {
                         byte[] payload = buffer.get(nextSeq);
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
                         DataOutputStream dos = new DataOutputStream(baos);
                         dos.writeInt(nextSeq);
-                        dos.writeBoolean(nextSeq == totalPaquetes - 1); // marcar último
+                        dos.writeBoolean(nextSeq == totalPaquetes - 1);
                         dos.write(payload);
                         dos.flush();
                         byte[] paqueteBytes = baos.toByteArray();
 
                         if (random.nextDouble() < PROB_PERDIDA) {
-                            System.out.println("\u001B[31m => Paquete #" + nextSeq + " perdido (simulado) \u001B[0m");
+                            System.out.println("\u001B[31m=> Paquete #" + nextSeq + " perdido (simulado)\u001B[0m");
                         } else {
                             DatagramPacket dp = new DatagramPacket(paqueteBytes, paqueteBytes.length, clienteDir, clientePuerto);
                             socket.send(dp);
-                            System.out.println("\u001B[34m => Enviado #" + nextSeq + " bytes: " + paqueteBytes.length + (nextSeq == totalPaquetes - 1 ? " (ultimo)\u001B[0m" : "\u001B[0m"));
+                            System.out.println("\u001B[34m=> Enviado #" + nextSeq + " (" + paqueteBytes.length + " bytes)\u001B[0m");
                         }
 
                         if (!timerOn) {
@@ -99,64 +114,64 @@ public class vdUDPser {
                         nextSeq++;
                     }
 
-                    // Recibir ACKs
                     try {
                         System.out.println("\u001B[36m---------- RECIBIENDO ACUSES ----------\u001B[0m");
                         byte[] bufAck = new byte[128];
                         DatagramPacket ackPkt = new DatagramPacket(bufAck, bufAck.length);
                         socket.receive(ackPkt);
+                        reintentos = 0;
 
                         String ackMsg = new String(ackPkt.getData(), 0, ackPkt.getLength()).trim();
-
                         if (ackMsg.startsWith("ACK")) {
-                            String numStr = ackMsg.substring(3);
-                            try {
-                                int ackNum = Integer.parseInt(numStr);
-                                System.out.println("\u001B[32m <= Recibido \u001B[0m" + ackMsg);
+                            int ackNum = Integer.parseInt(ackMsg.substring(3));
+                            System.out.println("\u001B[32m<= Recibido " + ackMsg + "\u001B[0m");
 
-                                if (ackNum >= base) {
-                                    base = ackNum + 1;
-                                    if (base == nextSeq) {
-                                        timerOn = false;
-                                    } else {
-                                        timerStart = System.currentTimeMillis();
-                                        timerOn = true;
-                                    }
-
-                                    // Si ACK del último paquete → fin
-                                    if (ackNum == totalPaquetes - 1) {
-                                        System.out.println("\u001B[32m <= Ultimo ACK recibido. Fin de comunicacion.\u001B[0m");
-                                        sesionActiva = false;
-                                    }
+                            if (ackNum >= base) {
+                                base = ackNum + 1;
+                                if (base == nextSeq) {
+                                    timerOn = false;
                                 } else {
-                                    System.out.println("\u001B[33m ACK antiguo o duplicado: \u001B[0m" + ackMsg);
+                                    timerOn = true;
+                                    timerStart = System.currentTimeMillis();
                                 }
-                            } catch (NumberFormatException e) {
-                                System.out.println("\u001B[33m ACK con formato inválido: \u001B[0m" + ackMsg);
+
+                                if (ackNum == totalPaquetes - 1) {
+                                    System.out.println("\u001B[32m<= Último ACK recibido. Fin de transmisión.\u001B[0m");
+                                    sesionActiva = false;
+                                }
+                            } else {
+                                System.out.println("\u001B[33mACK duplicado: " + ackMsg + "\u001B[0m");
                             }
                         }
 
                     } catch (SocketTimeoutException ste) {
-                        System.out.println("\u001B[36m---------- RETRANSMITIENDO VENTANA ----------\u001B[0m");
+                        reintentos++;
+                        if (reintentos >= MAX_REINTENTOS) {
+                            System.out.println("\u001B[31mCliente no responde tras " + MAX_REINTENTOS + " intentos. Finalizando sesión.\u001B[0m");
+                            sesionActiva = false;
+                            break;
+                        }
+
+                        System.out.println("\u001B[33m---------- RETRANSMITIENDO VENTANA ----------\u001B[0m");
                         if (timerOn && (System.currentTimeMillis() - timerStart) >= TIMEOUT) {
-                            System.out.println(" ===> Timeout — reenviando ventana desde #" + base + " hasta #" + (nextSeq - 1));
+                            System.out.println("\u001B[33mTimeout — reenviando ventana desde #" + base + " hasta #" + (nextSeq - 1) + "\u001B[0m");
                             for (int i = base; i < nextSeq; i++) {
                                 byte[] payload = buffer.get(i);
                                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                                 DataOutputStream dos = new DataOutputStream(baos);
                                 dos.writeInt(i);
-                                dos.writeBoolean(i == totalPaquetes - 1); // es ultimo o nel?
+                                dos.writeBoolean(i == totalPaquetes - 1);
                                 dos.write(payload);
                                 dos.flush();
                                 byte[] reenvio = baos.toByteArray();
 
                                 if (random.nextDouble() < PROB_PERDIDA) {
-                                    System.out.println("\u001B[31m Reenvio perdido (simulado) #" + i + "\u001B[0m");
+                                    System.out.println("\u001B[31m => Reenvío perdido (simulado) #" + i + "\u001B[0m");
                                     continue;
                                 }
                                 DatagramPacket dpRe = new DatagramPacket(reenvio, reenvio.length, clienteDir, clientePuerto);
                                 socket.send(dpRe);
-                                System.out.println("\u001B[34m Reenviado #" + i + " bytes: " + reenvio.length + "\u001B[0m");
+                                System.out.println("\u001B[33m => Reenviado #" + i + "\u001B[0m");
                             }
                             timerStart = System.currentTimeMillis();
                         }
@@ -164,7 +179,7 @@ public class vdUDPser {
                 }
 
                 socket.setSoTimeout(0);
-                System.out.println("Comunicacion finalizada. Esperando nuevo cliente...");
+                System.out.println("Sesión terminada. Esperando nuevo cliente...");
             }
 
         } catch (Exception e) {

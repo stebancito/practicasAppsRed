@@ -1,8 +1,9 @@
 import java.io.*;
 import java.net.*;
 import java.util.Random;
+import javazoom.jl.player.Player; // Librería JLayer para reproducir MP3
 
-public class vdUDPcliente {
+public class controlFlujoCliente {
     private static final String HOST = "localhost";
     private static final int PUERTO = 9876;
     private static final double PROB_PERDIDA_ACK = 0.2;
@@ -13,31 +14,33 @@ public class vdUDPcliente {
         try (DatagramSocket socket = new DatagramSocket()) {
             InetAddress servidor = InetAddress.getByName(HOST);
 
-            // enviar START
             byte[] start = "INICIO".getBytes();
             socket.send(new DatagramPacket(start, start.length, servidor, PUERTO));
             System.out.println("INICIO enviado");
 
-            FileOutputStream fos = new FileOutputStream("recibido.mp3");
+            File archivoSalida = new File("recibido.mp3");
+            FileOutputStream fos = new FileOutputStream(archivoSalida);
             int esperado = 0;
-            boolean fin = false;
-
-            byte[] recvBuf = new byte[1024 + 16];
             boolean finRecibido = false;
             long ultimoPaqueteTiempo = 0;
-            final int TIMEOUT_FIN_MS = 3000; // espera 3 segundos extra por reenvíos del último paquete
+            final int TIMEOUT_FIN_MS = 3000;
+
+
+            byte[] recvBuf = new byte[65500 + 32];
+
+            System.out.println("\u001B[36m Esperando paquetes... \u001B[0m");
 
             while (true) {
                 DatagramPacket pkt = new DatagramPacket(recvBuf, recvBuf.length);
-                socket.setSoTimeout(finRecibido ? 1000 : 0); // si ya llegó el último, limita espera
+                socket.setSoTimeout(finRecibido ? 1000 : 0);
                 try {
                     socket.receive(pkt);
                 } catch (SocketTimeoutException e) {
                     if (finRecibido && (System.currentTimeMillis() - ultimoPaqueteTiempo > TIMEOUT_FIN_MS)) {
-                        System.out.println("\u001B[32m Fin confirmado: no se recibieron más paquetes.\u001B[0m");
+                        System.out.println("\u001B[35m Fin confirmado: no se recibieron más paquetes.\u001B[0m");
                         break;
                     } else {
-                        continue; // seguir esperando más paquetes
+                        continue;
                     }
                 }
 
@@ -51,45 +54,50 @@ public class vdUDPcliente {
                 dis.readFully(payload);
 
                 if (seq == esperado) {
-                    // paquete correcto y en orden
                     fos.write(payload);
-                    System.out.println("\u001B[32m Paquete #" + seq + " recibido correctamente (" + payloadLen + " bytes)\u001B[0m");
+                    System.out.println("\u001B[32m <= Paquete #" + seq + " recibido correctamente (" + payloadLen + " bytes)\u001B[0m");
                     esperado++;
 
                     if (isLast) {
                         finRecibido = true;
                         ultimoPaqueteTiempo = System.currentTimeMillis();
-                        System.out.println("\u001B[32m Último paquete recibido (#" + seq + ")\u001B[0m");
+                        System.out.println("\u001B[32m <= Ultimo paquete recibido (#" + seq + ")\u001B[0m");
                     }
 
-                    // enviar ACK del paquete recibido correctamente
                     enviarAck(socket, servidor, seq, random);
 
                 } else if (seq < esperado) {
-                    //  Paquete ya recibido anteriormente: reenviar último ACK
-                    System.out.println("\u001B[34m Paquete duplicado #" + seq + " — reenviando ACK" + (esperado - 1) + "\u001B[0m");
+                    System.out.println("\u001B[34m ? Paquete duplicado #" + seq + " — reenviando ACK" + (esperado - 1) + "\u001B[0m");
                     enviarAck(socket, servidor, esperado - 1, random);
 
                 } else {
-                    // paquete fuera de orden futuro
-                    System.out.println("\u001B[33m Paquete fuera de orden (esperado " + esperado + ", llegó " + seq + ") — ignorado \u001B[0m");
+                    System.out.println("\u001B[33m ? Paquete fuera de orden (esperado " + esperado + ", llegó " + seq + ") — ignorado \u001B[0m");
 
-                    // si ya vimos el último paquete, reenviar último ACK por seguridad
                     if (finRecibido) {
-                        System.out.println("\u001B[34m Reenviado ACK" + (esperado - 1) + " (confirmando fin) \u001B[0m");
+                        System.out.println("\u001B[34m => Reenviado ACK" + (esperado - 1) + " (confirmando fin) \u001B[0m");
                         enviarAck(socket, servidor, esperado - 1, random);
                     }
                 }
-
             }
 
             fos.close();
-            System.out.println("Archivo recibido y guardado como recibido.txt");
+            System.out.println("\u001B[32m Archivo recibido y guardado como recibido.mp3 \u001B[0m");
+
+            /* Reproducimos el archivo mp3 generado */
+            try (FileInputStream fis = new FileInputStream(archivoSalida)) {
+                System.out.println("\u001B[36m Reproduciendo audio recibido... \u001B[0m");
+                Player player = new Player(fis);
+                player.play();
+                System.out.println("\u001B[32m Reproducción finalizada. \u001B[0m");
+            } catch (Exception e) {
+                System.out.println("\u001B[31m  Error al reproducir el audio: " + e.getMessage() + " \u001B[0m");
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
     private static void enviarAck(DatagramSocket socket, InetAddress servidor, int ackNum, Random random) throws IOException {
         String ackMsg = "ACK" + ackNum;
         if (random.nextDouble() < PROB_PERDIDA_ACK) {
@@ -99,7 +107,6 @@ public class vdUDPcliente {
         byte[] ackBytes = ackMsg.getBytes();
         DatagramPacket ackPkt = new DatagramPacket(ackBytes, ackBytes.length, servidor, PUERTO);
         socket.send(ackPkt);
-        System.out.println("\u001B[34m Enviado " + ackMsg + "\u001B[0m");
+        System.out.println("\u001B[34m => Enviado " + ackMsg + " \u001B[0m");
     }
-
 }
