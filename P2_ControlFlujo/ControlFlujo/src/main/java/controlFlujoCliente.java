@@ -1,8 +1,8 @@
 import java.io.*;
 import java.net.*;
 import java.util.Random;
-import javazoom.jl.player.Player; // Librería JLayer para reproducir MP3
-
+import javazoom.jl.player.Player;
+    
 public class controlFlujoCliente {
     private static final String HOST = "localhost";
     private static final int PUERTO = 9876;

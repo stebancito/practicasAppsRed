@@ -40,9 +40,7 @@ public class controlFlujoSer {
 
                 socket.setSoTimeout(TIMEOUT);
 
-                // ========================================
-                // 🗂️ Selector de archivo MP3 (JFileChooser)
-                // ========================================
+
                 File archivo = null;
                 JFileChooser chooser = new JFileChooser();
                 chooser.setDialogTitle("Seleccionar archivo MP3 a enviar");
@@ -76,6 +74,10 @@ public class controlFlujoSer {
                 final int totalPaquetes = payloads.size();
                 System.out.println("Total de paquetes a enviar: " + totalPaquetes);
 
+                /*
+                bas es el paquete con acuse pendiente, nextSeq es el siguiente paquete a enviar
+                * timeStart es el temporizador de inicio
+                * */
                 int base = 0;
                 int nextSeq = 0;
                 long timerStart = 0;
