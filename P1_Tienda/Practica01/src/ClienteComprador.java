@@ -121,13 +121,13 @@ public class ClienteComprador {
                     System.out.println(respuesta);
                     System.out.println("******************************************************");
                     
-                    System.out.println("\nCompra finalizada. ¡Gracias por tu compra!");
-                    break;
+                    //System.out.println("\nCompra finalizada. ¡Gracias por tu compra!");
+                    continue;
                 }else if (opcion == 6) {
                     String comando = "SALIR";
                     out.write(comando.getBytes(StandardCharsets.UTF_8));
                     out.flush();
-                    System.out.println("Cerrando sesión y devolviendo productos...");
+                    System.out.println("Cerrando sesión");
                     socketCliente.close();
                     System.out.println("Conexión cerrada correctamente.");
                     break; 
